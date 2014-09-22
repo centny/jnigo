@@ -5,6 +5,10 @@ JNI-GO
 ===
 #Install
 ```
+export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/<darwin/win/linux>"
+
+export CGO_LDFLAGS="-I$JAVA_HOME/jre/lib/server"
+
 go get github.com/Centny/jnigo
 ```
 #Example

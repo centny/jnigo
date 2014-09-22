@@ -5,8 +5,8 @@ package jnigo
 #include <stdlib.h>
 #include <jni.h>
 #include "jnigo.h"
-#cgo darwin CFLAGS: -fprofile-arcs -ftest-coverage -I/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/include/ -I/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/include/darwin
-#cgo darwin LDFLAGS: -fprofile-arcs -ftest-coverage -L/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/jre/lib/server -ljvm
+//#cgo darwin CFLAGS:
+#cgo darwin LDFLAGS: -ljvm
 */
 import "C"
 import (
