@@ -11,7 +11,9 @@ package jnigo
 import "C"
 import (
 	"fmt"
+	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"unsafe"
 )
@@ -38,18 +40,40 @@ type Jarray C.jarray
 type Jval C.jval
 
 type Jboolean C.jboolean
-type Jbyte C.jbyte
-type Jchar C.jchar
-type Jshort C.jshort
+
+// type Jbyte C.jbyte
+// type Jchar C.jchar
+// type Jshort C.jshort
 type Jint C.jint
-type Jlong C.jlong
-type Jfloat C.jfloat
-type Jdouble C.jdouble
+
+// type Jlong C.jlong
+// type Jfloat C.jfloat
+// type Jdouble C.jdouble
 
 //
 type Char byte
 type Byte byte
 type EmptyObjAry string
+
+//
+var sig_m *regexp.Regexp = regexp.MustCompile("^[ZBCSIJFDL\\[].*$")
+
+//
+//
+func ToChar(args []byte) []Char {
+	vals := make([]Char, len(args))
+	for i, arg := range args {
+		vals[i] = Char(arg)
+	}
+	return vals
+}
+func ToByte(args []byte) []Byte {
+	vals := make([]Byte, len(args))
+	for i, arg := range args {
+		vals[i] = Byte(arg)
+	}
+	return vals
+}
 
 //
 type VMOption struct {
@@ -60,7 +84,7 @@ var GVM Jvm
 
 func Init(os ...string) int {
 	GVM.Version = JNI_VERSION_1_6
-	GVM.IgnoreUnrecognized = JNI_TRUE
+	GVM.IgnoreUnrecognized = true
 	for _, o := range os {
 		GVM.AddVMOption2(o)
 	}
@@ -71,8 +95,8 @@ func Destory() int {
 }
 
 type Jvm struct {
-	Version            Jint
-	IgnoreUnrecognized Jboolean
+	Version            int
+	IgnoreUnrecognized bool
 	//
 	options []VMOption
 	//
@@ -245,11 +269,32 @@ func (j *Jvm) covary(arg interface{}) (string, C.jobject, error) {
 			C.JNIGO_SetDoubleArrayRegion(j.env, cvals, 0, vlen, &vals[0])
 		}
 		return "[D", C.jobject(cvals), nil
+	case reflect.String:
+		slen := pval.Len()
+		vlen := C.jsize(slen)
+		cls := j.FindClass("Ljava/lang/String;")
+		cvals := C.JNIGO_NewObjectArray(j.env, vlen, cls.cls, nil)
+		for i := 0; i < slen; i++ {
+			_, os, _ := j.covstr(pval.Index(i).Interface().(string))
+			C.JNIGO_SetObjectArrayElement(j.env, C.jobjectArray(cvals), C.jsize(i), os)
+		}
+		return "[Ljava/lang/String;", C.jobject(cvals), nil
 	default:
 		return "", nil, Err("invalid type:%s", ptype.Elem().Kind().String())
 	}
 }
-
+func (j *Jvm) covstr_b(arg interface{}) (string, C.jobject, error) {
+	cls := j.FindClass("Ljava/lang/String;")
+	str, err := cls.New(arg)
+	if err == nil {
+		return "Ljava/lang/String;", str.jobj, nil
+	} else {
+		return "", nil, err
+	}
+}
+func (j *Jvm) covstr(arg string) (string, C.jobject, error) {
+	return j.covstr_b(ToChar([]byte(arg)))
+}
 func (j *Jvm) covval(arg interface{}) (string, C.jval, error) {
 	var _bval_ Byte
 	var _cval_ Char
@@ -262,9 +307,9 @@ func (j *Jvm) covval(arg interface{}) (string, C.jval, error) {
 	case reflect.TypeOf(_cval_):
 		return "C", C.jval{c: C.jchar(arg.(Char)), typ: 2}, nil
 	case reflect.TypeOf(_oval_):
-		return "L" + arg.(Object).Cls.Name + ";", C.jval{l: arg.(Object).jobj, typ: 8}, nil
+		return arg.(Object).Cls.Name, C.jval{l: arg.(Object).jobj, typ: 8}, nil
 	case reflect.TypeOf(__oval__):
-		return "L" + arg.(*Object).Cls.Name + ";", C.jval{l: arg.(*Object).jobj, typ: 8}, nil
+		return arg.(*Object).Cls.Name, C.jval{l: arg.(*Object).jobj, typ: 8}, nil
 	}
 	switch ptype.Kind() {
 	case reflect.Bool:
@@ -289,6 +334,9 @@ func (j *Jvm) covval(arg interface{}) (string, C.jval, error) {
 		return "D", C.jval{d: C.jdouble(arg.(float64)), typ: 7}, nil
 	case reflect.Slice:
 		sig, val, err := j.covary(arg)
+		return sig, C.jval{l: val, typ: 8}, err
+	case reflect.String:
+		sig, val, err := j.covstr(arg.(string))
 		return sig, C.jval{l: val, typ: 8}, err
 	default:
 		return "", C.jval{typ: -1}, Err("invalid type:%s", ptype.Kind().String())
@@ -340,7 +388,11 @@ func (j *Jvm) Init() Jint {
 	if vm_args.nOptions > 0 {
 		vm_args.options = &options[0]
 	}
-	vm_args.ignoreUnrecognized = JNI_TRUE
+	if j.IgnoreUnrecognized {
+		vm_args.ignoreUnrecognized = JNI_TRUE
+	} else {
+		vm_args.ignoreUnrecognized = JNI_FALSE
+	}
 	return (Jint)(C.JNI_CreateJavaVM(&j.jvm,
 		(*unsafe.Pointer)(unsafe.Pointer(&j.env)),
 		unsafe.Pointer(&vm_args)))
@@ -349,6 +401,7 @@ func (j *Jvm) Destroy() Jint {
 	return (Jint)(C.JNIGO_DestroyJavaVM(j.jvm))
 }
 func (j *Jvm) FindClass(name string) *Class {
+	name = j.SigName(name)
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	cls := C.JNIGO_FindClass(j.env, cname)
@@ -360,6 +413,50 @@ func (j *Jvm) FindClass(name string) *Class {
 			Name: name,
 			cls:  cls,
 		}
+	}
+}
+func (j *Jvm) SigName(name string) string {
+	name = strings.Trim(name, "\t ")
+	name = strings.Replace(name, ".", "/", -1)
+	if sig_m.MatchString(name) {
+		return name
+	} else {
+		return "L" + name + ";"
+	}
+}
+func (j *Jvm) New(name string, args ...interface{}) (*Object, error) {
+	name = strings.Trim(name, "[")
+	name = strings.Replace(name, ".", "/", -1)
+	cls := j.FindClass(name)
+	if cls == nil {
+		return nil, Err("class not found by:%s", name)
+	}
+	return cls.New(args...)
+}
+func (j *Jvm) NewS(arg string) *Object {
+	str, _ := j.New("Ljava/lang/String;", arg)
+	return str
+}
+func (j *Jvm) NewAry(name string, l int) (*Object, error) {
+	name = strings.Trim(name, "[")
+	name = strings.Replace(name, ".", "/", -1)
+	cls, clsa := j.FindClass(name), j.FindClass("["+name)
+	if cls == nil {
+		return nil, Err("class not found by:%s", name)
+	}
+	cvals := C.JNIGO_NewObjectArray(j.env, C.jsize(l), cls.cls, nil)
+	return &Object{
+		Vm:   j,
+		Cls:  clsa,
+		jobj: C.jobject(cvals),
+	}, nil
+}
+func (j *Jvm) NewAryS(args ...string) *Object {
+	_, vals, _ := j.covary(args)
+	return &Object{
+		Vm:   j,
+		Cls:  j.FindClass("[Ljava/lang/String;"),
+		jobj: vals,
 	}
 }
 
@@ -394,6 +491,29 @@ func (c *Class) GetMethod(name, arg_sig, ret_sig string, static bool) *Method {
 		}
 	}
 }
+func (c *Class) GetField(name, sig string, static bool) *Field {
+	cname, csig := C.CString(name), C.CString(sig)
+	defer C.free(unsafe.Pointer(cname))
+	defer C.free(unsafe.Pointer(csig))
+	var fid C.jfieldID
+	if static {
+		fid = C.JNIGO_GetStaticFieldID(c.Vm.env, c.cls, cname, csig)
+	} else {
+		fid = C.JNIGO_GetFieldID(c.Vm.env, c.cls, cname, csig)
+	}
+	if fid == nil {
+		return nil
+	} else {
+		return &Field{
+			Vm:   c.Vm,
+			Cls:  c,
+			Obj:  nil,
+			Name: name,
+			Sig:  sig,
+			fid:  fid,
+		}
+	}
+}
 func (c *Class) New(args ...interface{}) (*Object, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
 	if err != nil {
@@ -414,7 +534,7 @@ func (c *Class) CallObject(name, ret_sig string, args ...interface{}) (*Object, 
 	}
 	m := c.GetMethod(name, sig, ret_sig, true)
 	if m == nil {
-		return nil, Err("method not found by sig:(%s)%s", sig, ret_sig)
+		return nil, Err("method(%s) not found by sig:(%s)%s", name, sig, ret_sig)
 	}
 	return m.CallObjectMethodA(vals)
 }
@@ -425,7 +545,7 @@ func (c *Class) CallVoid(name string, args ...interface{}) error {
 	}
 	m := c.GetMethod(name, sig, "V", true)
 	if m == nil {
-		return Err("method not found by sig:(%s)%s", sig, "V")
+		return Err("method(%s) not found by sig:(%s)%s", name, sig, "V")
 	}
 	m.CallVoidMethodA(vals)
 	return nil
@@ -437,7 +557,7 @@ func (c *Class) CallBoolean(name string, args ...interface{}) (bool, error) {
 	}
 	m := c.GetMethod(name, sig, "Z", true)
 	if m == nil {
-		return false, Err("method not found by sig:(%s)%s", sig, "Z")
+		return false, Err("method(%s) not found by sig:(%s)%s", name, sig, "Z")
 	}
 	return m.CallBooleanMethodA(vals), nil
 }
@@ -448,7 +568,7 @@ func (c *Class) CallByte(name string, args ...interface{}) (byte, error) {
 	}
 	m := c.GetMethod(name, sig, "B", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "B")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "B")
 	}
 	return m.CallByteMethodA(vals), nil
 }
@@ -459,7 +579,7 @@ func (c *Class) CallChar(name string, args ...interface{}) (byte, error) {
 	}
 	m := c.GetMethod(name, sig, "C", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "C")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "C")
 	}
 	return m.CallCharMethodA(vals), nil
 }
@@ -470,7 +590,7 @@ func (c *Class) CallShort(name string, args ...interface{}) (int16, error) {
 	}
 	m := c.GetMethod(name, sig, "S", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "S")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "S")
 	}
 	return m.CallShortMethodA(vals), nil
 }
@@ -481,7 +601,7 @@ func (c *Class) CallInt(name string, args ...interface{}) (int, error) {
 	}
 	m := c.GetMethod(name, sig, "I", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "I")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "I")
 	}
 	return m.CallIntMethodA(vals), nil
 }
@@ -492,7 +612,7 @@ func (c *Class) CallLong(name string, args ...interface{}) (int64, error) {
 	}
 	m := c.GetMethod(name, sig, "J", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "J")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "J")
 	}
 	return m.CallLongMethodA(vals), nil
 }
@@ -503,7 +623,7 @@ func (c *Class) CallFloat(name string, args ...interface{}) (float32, error) {
 	}
 	m := c.GetMethod(name, sig, "F", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "F")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "F")
 	}
 	return m.CallFloatMethodA(vals), nil
 }
@@ -514,108 +634,132 @@ func (c *Class) CallDouble(name string, args ...interface{}) (float64, error) {
 	}
 	m := c.GetMethod(name, sig, "D", true)
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "D")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "D")
 	}
 	return m.CallDoubleMethodA(vals), nil
 }
 
+//
+func (c *Class) Object(name, sig string) (*Object, error) {
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return nil, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Object()
+}
+func (c *Class) Boolean(name string) (bool, error) {
+	sig := "Z"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return false, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Boolean(), nil
+}
+func (c *Class) Byte(name string) (byte, error) {
+	sig := "B"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Byte(), nil
+}
+func (c *Class) Char(name string) (byte, error) {
+	sig := "C"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Char(), nil
+}
+func (c *Class) Short(name string) (int16, error) {
+	sig := "S"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Short(), nil
+}
+func (c *Class) Int(name string) (int, error) {
+	sig := "I"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Int(), nil
+}
+func (c *Class) Long(name string) (int64, error) {
+	sig := "J"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Long(), nil
+}
+func (c *Class) Float(name string) (float32, error) {
+	sig := "F"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Float(), nil
+}
+func (c *Class) Double(name string) (float64, error) {
+	sig := "D"
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Double(), nil
+}
+func (c *Class) Set(name string, arg interface{}) error {
+	sig, cval, err := c.Vm.CovArgs(arg)
+	if err != nil {
+		return err
+	}
+	f := c.GetField(name, sig, true)
+	if f == nil {
+		return Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Set(cval[0])
+}
+
 ///////////////
-
-type Method struct {
-	Vm     *Jvm
-	Cls    *Class
-	Obj    *Object
-	Name   string
-	ArgSig string
-	RetSig string
-	//
-	mid C.jmethodID
-}
-
-func (m *Method) tobj() C.jobject {
-	if m.Obj == nil {
-		return C.jobject(m.Cls.cls)
-	} else {
-		return m.Obj.jobj
-	}
-}
-func (m *Method) FindRetClass() *Class {
-	return m.Vm.FindClass(strings.Trim(m.RetSig, "[L;"))
-}
-func (m *Method) call_args(vals []Jval) (*C.JNIEnv, C.jobject, C.jmethodID, *C.jval, C.int) {
-	rvals := []C.jval{}
-	for _, val := range vals {
-		rvals = append(rvals, C.jval(val))
-	}
-	var tval *C.jval = nil
-	if len(rvals) > 0 {
-		tval = &rvals[0]
-	}
-	return m.Vm.env, m.tobj(), m.mid, tval, C.int(len(rvals))
-}
-func (m *Method) newObjectA(vals []Jval) (*Object, error) {
-	res := C.JNIGO_NewObjectA(m.call_args(vals))
-	return &Object{
-		Vm:   m.Vm,
-		Cls:  m.Cls,
-		jobj: res,
-	}, nil
-}
-func (m *Method) CallObjectMethodA(vals []Jval) (*Object, error) {
-	var cls *Class = nil
-	if strings.HasPrefix(m.RetSig, "[L") {
-		cls = m.FindRetClass()
-		if cls == nil {
-			return nil, Err("invalid return class:%s", m.RetSig)
-		}
-	}
-	res := C.JNIGO_CallObjectMethodA(m.call_args(vals))
-	return &Object{
-		Vm:   m.Vm,
-		Cls:  cls,
-		jobj: res,
-	}, nil
-}
-func (m *Method) CallVoidMethodA(vals []Jval) {
-	C.JNIGO_CallVoidMethodA(m.call_args(vals))
-}
-func (m *Method) CallBooleanMethodA(vals []Jval) bool {
-	return C.JNIGO_CallBooleanMethodA(m.call_args(vals)) == JNI_TRUE
-}
-func (m *Method) CallByteMethodA(vals []Jval) byte {
-	return byte(C.JNIGO_CallByteMethodA(m.call_args(vals)))
-}
-func (m *Method) CallCharMethodA(vals []Jval) byte {
-	return byte(C.JNIGO_CallCharMethodA(m.call_args(vals)))
-}
-func (m *Method) CallShortMethodA(vals []Jval) int16 {
-	return int16(C.JNIGO_CallShortMethodA(m.call_args(vals)))
-}
-func (m *Method) CallIntMethodA(vals []Jval) int {
-	return int(C.JNIGO_CallIntMethodA(m.call_args(vals)))
-}
-func (m *Method) CallLongMethodA(vals []Jval) int64 {
-	return int64(C.JNIGO_CallLongMethodA(m.call_args(vals)))
-}
-func (m *Method) CallFloatMethodA(vals []Jval) float32 {
-	return float32(C.JNIGO_CallFloatMethodA(m.call_args(vals)))
-}
-func (m *Method) CallDoubleMethodA(vals []Jval) float64 {
-	return float64(C.JNIGO_CallDoubleMethodA(m.call_args(vals)))
-}
 
 type Object struct {
 	Vm   *Jvm
 	Cls  *Class
+	Gen  *Class
 	jobj C.jobject
 }
 
+func (o *Object) As(name string) (*Object, error) {
+	cls := o.Vm.FindClass(name)
+	if cls == nil {
+		return nil, Err("class not found by name:%s", name)
+	}
+	return &Object{
+		Vm:   o.Vm,
+		Cls:  cls,
+		Gen:  o.Cls,
+		jobj: o.jobj,
+	}, nil
+}
+func (o *Object) IsNull() bool {
+	return o.jobj == nil
+}
 func (o *Object) GetMethod(name, arg_sig, ret_sig string) *Method {
 	m := o.Cls.GetMethod(name, arg_sig, ret_sig, false)
 	if m != nil {
 		m.Obj = o
 	}
 	return m
+}
+func (o *Object) GetField(name, sig string) *Field {
+	f := o.Cls.GetField(name, sig, false)
+	if f != nil {
+		f.Obj = o
+	}
+	return f
 }
 
 ////////////////
@@ -626,7 +770,7 @@ func (o *Object) CallObject(name, ret_sig string, args ...interface{}) (*Object,
 	}
 	m := o.GetMethod(name, sig, ret_sig)
 	if m == nil {
-		return nil, Err("method not found by sig:(%s)%s", sig, ret_sig)
+		return nil, Err("method(%s) not found by sig:(%s)%s", name, sig, ret_sig)
 	}
 	return m.CallObjectMethodA(vals)
 }
@@ -637,7 +781,7 @@ func (o *Object) CallVoid(name string, args ...interface{}) error {
 	}
 	m := o.GetMethod(name, sig, "V")
 	if m == nil {
-		return Err("method not found by sig:(%s)%s", sig, "V")
+		return Err("method(%s) not found by sig:(%s)%s", name, sig, "V")
 	}
 	m.CallVoidMethodA(vals)
 	return nil
@@ -649,7 +793,7 @@ func (o *Object) CallBoolean(name string, args ...interface{}) (bool, error) {
 	}
 	m := o.GetMethod(name, sig, "Z")
 	if m == nil {
-		return false, Err("method not found by sig:(%s)%s", sig, "Z")
+		return false, Err("method(%s) not found by sig:(%s)%s", name, sig, "Z")
 	}
 	return m.CallBooleanMethodA(vals), nil
 }
@@ -660,7 +804,7 @@ func (o *Object) CallByte(name string, args ...interface{}) (byte, error) {
 	}
 	m := o.GetMethod(name, sig, "B")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "B")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "B")
 	}
 	return m.CallByteMethodA(vals), nil
 }
@@ -671,7 +815,7 @@ func (o *Object) CallChar(name string, args ...interface{}) (byte, error) {
 	}
 	m := o.GetMethod(name, sig, "C")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "C")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "C")
 	}
 	return m.CallCharMethodA(vals), nil
 }
@@ -682,7 +826,7 @@ func (o *Object) CallShort(name string, args ...interface{}) (int16, error) {
 	}
 	m := o.GetMethod(name, sig, "S")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "S")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "S")
 	}
 	return m.CallShortMethodA(vals), nil
 }
@@ -693,7 +837,7 @@ func (o *Object) CallInt(name string, args ...interface{}) (int, error) {
 	}
 	m := o.GetMethod(name, sig, "I")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "I")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "I")
 	}
 	return m.CallIntMethodA(vals), nil
 }
@@ -704,7 +848,7 @@ func (o *Object) CallLong(name string, args ...interface{}) (int64, error) {
 	}
 	m := o.GetMethod(name, sig, "J")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "J")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "J")
 	}
 	return m.CallLongMethodA(vals), nil
 }
@@ -715,7 +859,7 @@ func (o *Object) CallFloat(name string, args ...interface{}) (float32, error) {
 	}
 	m := o.GetMethod(name, sig, "F")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "F")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "F")
 	}
 	return m.CallFloatMethodA(vals), nil
 }
@@ -726,9 +870,93 @@ func (o *Object) CallDouble(name string, args ...interface{}) (float64, error) {
 	}
 	m := o.GetMethod(name, sig, "D")
 	if m == nil {
-		return 0, Err("method not found by sig:(%s)%s", sig, "D")
+		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "D")
 	}
 	return m.CallDoubleMethodA(vals), nil
+}
+
+//
+func (o *Object) Object(name, sig string) (*Object, error) {
+	f := o.GetField(name, sig)
+	if f == nil {
+		return nil, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Object()
+}
+func (o *Object) Boolean(name string) (bool, error) {
+	sig := "Z"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return false, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Boolean(), nil
+}
+func (o *Object) Byte(name string) (byte, error) {
+	sig := "B"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Byte(), nil
+}
+func (o *Object) Char(name string) (byte, error) {
+	sig := "C"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Char(), nil
+}
+func (o *Object) Short(name string) (int16, error) {
+	sig := "S"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Short(), nil
+}
+func (o *Object) Int(name string) (int, error) {
+	sig := "I"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Int(), nil
+}
+func (o *Object) Long(name string) (int64, error) {
+	sig := "J"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Long(), nil
+}
+func (o *Object) Float(name string) (float32, error) {
+	sig := "F"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Float(), nil
+}
+func (o *Object) Double(name string) (float64, error) {
+	sig := "D"
+	f := o.GetField(name, sig)
+	if f == nil {
+		return 0, Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Double(), nil
+}
+func (o *Object) Set(name string, arg interface{}) error {
+	sig, cval, err := o.Vm.CovArgs(arg)
+	if err != nil {
+		return err
+	}
+	f := o.GetField(name, sig)
+	if f == nil {
+		return Err("field(%s) not found by sig:%s", name, sig)
+	}
+	return f.Set(cval[0])
 }
 
 ///////////////
@@ -742,10 +970,39 @@ func (o *Object) GetObject(idx int) *Object {
 	} else {
 		return &Object{
 			Vm:   o.Vm,
-			Cls:  o.Cls,
+			Cls:  o.Vm.FindClass(strings.Trim(o.Cls.Name, "[")),
 			jobj: res,
 		}
 	}
+}
+func (o *Object) SetObject(idx int, v *Object) {
+	C.JNIGO_SetObjectArrayElement(o.Vm.env, C.jobjectArray(o.jobj), C.jsize(idx), v.jobj)
+}
+func (o *Object) AsString() string {
+	bys, err := o.CallObject("toCharArray", "[C")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return ""
+	} else {
+		return string(bys.AsCharAry(nil))
+	}
+}
+func (o *Object) ToString() string {
+	ss, err := o.CallObject("toString", "Ljava/lang/String;")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return ""
+	} else {
+		return ss.AsString()
+	}
+}
+func (o *Object) AsStringAry(f func(o *Object, i int, v string)) []string {
+	slen := o.Len()
+	ss := make([]string, slen)
+	for i := 0; i < slen; i++ {
+		ss[i] = o.GetObject(i).AsString()
+	}
+	return ss
 }
 func (o *Object) AsBoolAry(f func(o *Object, i int, v bool)) []bool {
 	vlen := o.Len()
@@ -875,4 +1132,239 @@ func (o *Object) AsDoubleAry(f func(o *Object, i int, v float64)) []float64 {
 		}
 	}
 	return gvs
+}
+
+///////////
+
+type Method struct {
+	Vm     *Jvm
+	Cls    *Class
+	Obj    *Object
+	Name   string
+	ArgSig string
+	RetSig string
+	//
+	mid C.jmethodID
+}
+
+func (m *Method) tobj() C.jobject {
+	if m.Obj == nil {
+		return C.jobject(m.Cls.cls)
+	} else {
+		return m.Obj.jobj
+	}
+}
+func (m *Method) FindRetClass() *Class {
+	return m.Vm.FindClass(m.RetSig)
+}
+func (m *Method) call_args(vals []Jval) (*C.JNIEnv, C.jobject, C.jmethodID, *C.jval, C.int) {
+	rvals := []C.jval{}
+	for _, val := range vals {
+		rvals = append(rvals, C.jval(val))
+	}
+	var tval *C.jval = nil
+	if len(rvals) > 0 {
+		tval = &rvals[0]
+	}
+	return m.Vm.env, m.tobj(), m.mid, tval, C.int(len(rvals))
+}
+func (m *Method) newObjectA(vals []Jval) (*Object, error) {
+	res := C.JNIGO_NewObjectA(m.call_args(vals))
+	return &Object{
+		Vm:   m.Vm,
+		Cls:  m.Cls,
+		jobj: res,
+	}, nil
+}
+func (m *Method) CallObjectMethodA(vals []Jval) (*Object, error) {
+	cls := m.FindRetClass()
+	if cls == nil {
+		return nil, Err("invalid return class:%s", m.RetSig)
+	}
+	if m.Obj == nil {
+		return &Object{
+			Vm:   m.Vm,
+			Cls:  cls,
+			jobj: C.JNIGO_CallStaticObjectMethodA(m.call_args(vals)),
+		}, nil
+	} else {
+		return &Object{
+			Vm:   m.Vm,
+			Cls:  cls,
+			jobj: C.JNIGO_CallObjectMethodA(m.call_args(vals)),
+		}, nil
+	}
+}
+func (m *Method) CallVoidMethodA(vals []Jval) {
+	if m.Obj == nil {
+		C.JNIGO_CallStaticVoidMethodA(m.call_args(vals))
+	} else {
+		C.JNIGO_CallVoidMethodA(m.call_args(vals))
+	}
+}
+func (m *Method) CallBooleanMethodA(vals []Jval) bool {
+	if m.Obj == nil {
+		return C.JNIGO_CallStaticBooleanMethodA(m.call_args(vals)) == JNI_TRUE
+	} else {
+		return C.JNIGO_CallBooleanMethodA(m.call_args(vals)) == JNI_TRUE
+	}
+}
+func (m *Method) CallByteMethodA(vals []Jval) byte {
+	if m.Obj == nil {
+		return byte(C.JNIGO_CallStaticByteMethodA(m.call_args(vals)))
+	} else {
+		return byte(C.JNIGO_CallByteMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallCharMethodA(vals []Jval) byte {
+	if m.Obj == nil {
+		return byte(C.JNIGO_CallStaticCharMethodA(m.call_args(vals)))
+	} else {
+		return byte(C.JNIGO_CallCharMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallShortMethodA(vals []Jval) int16 {
+	if m.Obj == nil {
+		return int16(C.JNIGO_CallStaticShortMethodA(m.call_args(vals)))
+	} else {
+		return int16(C.JNIGO_CallShortMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallIntMethodA(vals []Jval) int {
+	if m.Obj == nil {
+		return int(C.JNIGO_CallStaticIntMethodA(m.call_args(vals)))
+	} else {
+		return int(C.JNIGO_CallIntMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallLongMethodA(vals []Jval) int64 {
+	if m.Obj == nil {
+		return int64(C.JNIGO_CallStaticLongMethodA(m.call_args(vals)))
+	} else {
+		return int64(C.JNIGO_CallLongMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallFloatMethodA(vals []Jval) float32 {
+	if m.Obj == nil {
+		return float32(C.JNIGO_CallStaticFloatMethodA(m.call_args(vals)))
+	} else {
+		return float32(C.JNIGO_CallFloatMethodA(m.call_args(vals)))
+	}
+}
+func (m *Method) CallDoubleMethodA(vals []Jval) float64 {
+	if m.Obj == nil {
+		return float64(C.JNIGO_CallStaticDoubleMethodA(m.call_args(vals)))
+	} else {
+		return float64(C.JNIGO_CallDoubleMethodA(m.call_args(vals)))
+	}
+}
+
+///////////////
+
+type Field struct {
+	Vm   *Jvm
+	Cls  *Class
+	Obj  *Object
+	Name string
+	Sig  string
+	fid  C.jfieldID
+}
+
+func (f *Field) tobj() C.jobject {
+	if f.Obj == nil {
+		return C.jobject(f.Cls.cls)
+	} else {
+		return f.Obj.jobj
+	}
+}
+func (f *Field) call_args() (*C.JNIEnv, C.jobject, C.jfieldID) {
+	return f.Vm.env, f.tobj(), f.fid
+}
+func (f *Field) FindRetClass() *Class {
+	return f.Vm.FindClass(f.Sig)
+}
+func (f *Field) Object() (*Object, error) {
+	cls := f.FindRetClass()
+	if cls == nil {
+		return nil, Err("invalid return class:%s", f.Sig)
+	}
+	if f.Obj == nil {
+		return &Object{
+			Vm:   f.Vm,
+			Cls:  cls,
+			jobj: C.JNIGO_GetStaticObjectField(f.call_args()),
+		}, nil
+	} else {
+		return &Object{
+			Vm:   f.Vm,
+			Cls:  cls,
+			jobj: C.JNIGO_GetObjectField(f.call_args()),
+		}, nil
+	}
+
+}
+func (f *Field) Boolean() bool {
+	if f.Obj == nil {
+		return C.JNIGO_GetStaticBooleanField(f.call_args()) == JNI_TRUE
+	} else {
+		return C.JNIGO_GetBooleanField(f.call_args()) == JNI_TRUE
+	}
+}
+func (f *Field) Byte() byte {
+	if f.Obj == nil {
+		return byte(C.JNIGO_GetStaticByteField(f.call_args()))
+	} else {
+		return byte(C.JNIGO_GetByteField(f.call_args()))
+	}
+}
+func (f *Field) Char() byte {
+	if f.Obj == nil {
+		return byte(C.JNIGO_GetStaticCharField(f.call_args()))
+	} else {
+		return byte(C.JNIGO_GetCharField(f.call_args()))
+	}
+}
+func (f *Field) Short() int16 {
+	if f.Obj == nil {
+		return int16(C.JNIGO_GetStaticShortField(f.call_args()))
+	} else {
+		return int16(C.JNIGO_GetShortField(f.call_args()))
+	}
+}
+func (f *Field) Int() int {
+	if f.Obj == nil {
+		return int(C.JNIGO_GetStaticIntField(f.call_args()))
+	} else {
+		return int(C.JNIGO_GetIntField(f.call_args()))
+	}
+}
+func (f *Field) Long() int64 {
+	if f.Obj == nil {
+		return int64(C.JNIGO_GetStaticLongField(f.call_args()))
+	} else {
+		return int64(C.JNIGO_GetLongField(f.call_args()))
+	}
+}
+func (f *Field) Float() float32 {
+	if f.Obj == nil {
+		return float32(C.JNIGO_GetStaticFloatField(f.call_args()))
+	} else {
+		return float32(C.JNIGO_GetFloatField(f.call_args()))
+	}
+}
+func (f *Field) Double() float64 {
+	if f.Obj == nil {
+		return float64(C.JNIGO_GetStaticDoubleField(f.call_args()))
+	} else {
+		return float64(C.JNIGO_GetDoubleField(f.call_args()))
+	}
+}
+
+func (f *Field) Set(arg Jval) error {
+	if f.Obj == nil {
+		C.JNIGO_SetStaticVal(f.Vm.env, f.tobj(), f.fid, C.jval(arg))
+	} else {
+		C.JNIGO_SetVal(f.Vm.env, f.tobj(), f.fid, C.jval(arg))
+	}
+	return nil
 }

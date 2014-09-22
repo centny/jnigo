@@ -52,13 +52,153 @@ jclass JNIGO_FindClass(JNIEnv *env, const char *name) {
 jint JNIGO_DestroyJavaVM(JavaVM *vm) {
 	return (*vm)->DestroyJavaVM(vm);
 }
-jmethodID JNIGO_GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name,
-		const char *sig) {
-	return (*env)->GetStaticMethodID(env, clazz, name, sig);
+jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->NewObjectA(env, clazz, methodID, vals);
+	} else {
+		return (*env)->NewObjectA(env, clazz, methodID, 0);
+	}
 }
+//
+//
+jfieldID JNIGO_GetFieldID(JNIEnv *env, jclass clazz, const char *name,
+		const char *sig) {
+	return (*env)->GetFieldID(env, clazz, name, sig);
+}
+jfieldID JNIGO_GetStaticFieldID(JNIEnv *env, jclass clazz, const char *name,
+		const char *sig) {
+	return (*env)->GetStaticFieldID(env, clazz, name, sig);
+}
+//
+jobject JNIGO_GetObjectField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetObjectField(env, obj, fieldID);
+}
+jboolean JNIGO_GetBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetBooleanField(env, obj, fieldID);
+}
+jbyte JNIGO_GetByteField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetByteField(env, obj, fieldID);
+}
+jchar JNIGO_GetCharField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetCharField(env, obj, fieldID);
+}
+jshort JNIGO_GetShortField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetShortField(env, obj, fieldID);
+}
+jint JNIGO_GetIntField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetIntField(env, obj, fieldID);
+}
+jlong JNIGO_GetLongField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetLongField(env, obj, fieldID);
+}
+jfloat JNIGO_GetFloatField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetFloatField(env, obj, fieldID);
+}
+jdouble JNIGO_GetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetDoubleField(env, obj, fieldID);
+}
+jobject JNIGO_GetStaticObjectField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticObjectField(env, obj, fieldID);
+}
+jboolean JNIGO_GetStaticBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticBooleanField(env, obj, fieldID);
+}
+jbyte JNIGO_GetStaticByteField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticByteField(env, obj, fieldID);
+}
+jchar JNIGO_GetStaticCharField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticCharField(env, obj, fieldID);
+}
+jshort JNIGO_GetStaticShortField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticShortField(env, obj, fieldID);
+}
+jint JNIGO_GetStaticIntField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticIntField(env, obj, fieldID);
+}
+jlong JNIGO_GetStaticLongField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticLongField(env, obj, fieldID);
+}
+jfloat JNIGO_GetStaticFloatField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticFloatField(env, obj, fieldID);
+}
+jdouble JNIGO_GetStaticDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID) {
+	return (*env)->GetStaticDoubleField(env, obj, fieldID);
+}
+//
+void JNIGO_SetVal(JNIEnv *env, jobject obj, jfieldID fieldID, jval val) {
+	switch (val.typ) {
+	case 0:
+		(*env)->SetBooleanField(env, obj, fieldID, val.z);
+		break;
+	case 1:
+		(*env)->SetByteField(env, obj, fieldID, val.b);
+		break;
+	case 2:
+		(*env)->SetCharField(env, obj, fieldID, val.c);
+		break;
+	case 3:
+		(*env)->SetShortField(env, obj, fieldID, val.s);
+		break;
+	case 4:
+		(*env)->SetIntField(env, obj, fieldID, val.i);
+		break;
+	case 5:
+		(*env)->SetLongField(env, obj, fieldID, val.j);
+		break;
+	case 6:
+		(*env)->SetFloatField(env, obj, fieldID, val.f);
+		break;
+	case 7:
+		(*env)->SetDoubleField(env, obj, fieldID, val.d);
+		break;
+	default:
+		(*env)->SetObjectField(env, obj, fieldID, val.l);
+		break;
+	}
+}
+void JNIGO_SetStaticVal(JNIEnv *env, jobject obj, jfieldID fieldID, jval val) {
+	switch (val.typ) {
+	case 0:
+		(*env)->SetStaticBooleanField(env, obj, fieldID, val.z);
+		break;
+	case 1:
+		(*env)->SetStaticByteField(env, obj, fieldID, val.b);
+		break;
+	case 2:
+		(*env)->SetStaticCharField(env, obj, fieldID, val.c);
+		break;
+	case 3:
+		(*env)->SetStaticShortField(env, obj, fieldID, val.s);
+		break;
+	case 4:
+		(*env)->SetStaticIntField(env, obj, fieldID, val.i);
+		break;
+	case 5:
+		(*env)->SetStaticLongField(env, obj, fieldID, val.j);
+		break;
+	case 6:
+		(*env)->SetStaticFloatField(env, obj, fieldID, val.f);
+		break;
+	case 7:
+		(*env)->SetStaticDoubleField(env, obj, fieldID, val.d);
+		break;
+	default:
+		(*env)->SetStaticObjectField(env, obj, fieldID, val.l);
+		break;
+	}
+}
+//
+//
 jmethodID JNIGO_GetMethodID(JNIEnv *env, jclass clazz, const char *name,
 		const char *sig) {
 	return (*env)->GetMethodID(env, clazz, name, sig);
+}
+jmethodID JNIGO_GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name,
+		const char *sig) {
+	return (*env)->GetStaticMethodID(env, clazz, name, sig);
 }
 //
 jobject JNIGO_CallObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
@@ -161,16 +301,108 @@ void JNIGO_CallVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		(*env)->CallVoidMethodA(env, obj, methodID, 0);
 	}
 }
-jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
+//
+jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);
-		return (*env)->NewObjectA(env, clazz, methodID, vals);
+		return (*env)->CallStaticObjectMethodA(env, obj, methodID, vals);
 	} else {
-		return (*env)->NewObjectA(env, clazz, methodID, 0);
+		return (*env)->CallStaticObjectMethodA(env, obj, methodID, 0);
 	}
 }
+jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticBooleanMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticBooleanMethodA(env, obj, methodID, 0);
+	}
+}
+jbyte JNIGO_CallStaticByteMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticByteMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticByteMethodA(env, obj, methodID, 0);
+	}
+}
+jchar JNIGO_CallStaticCharMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticCharMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticCharMethodA(env, obj, methodID, 0);
+	}
+}
+jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticShortMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticShortMethodA(env, obj, methodID, 0);
+	}
+}
+jint JNIGO_CallStaticIntMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticIntMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticIntMethodA(env, obj, methodID, 0);
+	}
+}
+jlong JNIGO_CallStaticLongMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticLongMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticLongMethodA(env, obj, methodID, 0);
+	}
+}
+jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticFloatMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticFloatMethodA(env, obj, methodID, 0);
+	}
+}
+jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		return (*env)->CallStaticDoubleMethodA(env, obj, methodID, vals);
+	} else {
+		return (*env)->CallStaticDoubleMethodA(env, obj, methodID, 0);
+	}
+}
+void JNIGO_CallStaticVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len) {
+	if (len > 0) {
+		jvalue vals[len];
+		covjval(vals, args, len);
+		(*env)->CallStaticVoidMethodA(env, obj, methodID, vals);
+	} else {
+		(*env)->CallStaticVoidMethodA(env, obj, methodID, 0);
+	}
+}
+//
 //
 jobjectArray JNIGO_NewObjectArray(JNIEnv *env, jsize len, jclass clazz,
 		jobject init) {

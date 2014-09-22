@@ -6,6 +6,7 @@ public class ObjectM {
 	public ObjectM(int a, int b) {
 		this.a = a;
 		this.b = b;
+		"".length();
 	}
 
 	public int getA() {

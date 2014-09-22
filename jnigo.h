@@ -19,11 +19,44 @@ typedef struct {
 //
 jclass JNIGO_FindClass(JNIEnv *env, const char *name);
 jint JNIGO_DestroyJavaVM(JavaVM *vm);
-jmethodID JNIGO_GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name,
+jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
+		const jval *args, int len);
+//
+//
+jfieldID JNIGO_GetFieldID(JNIEnv *env, jclass clazz, const char *name,
 		const char *sig);
+jfieldID JNIGO_GetStaticFieldID(JNIEnv *env, jclass clazz, const char *name,
+		const char *sig);
+//
+jobject JNIGO_GetObjectField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jboolean JNIGO_GetBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jbyte JNIGO_GetByteField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jchar JNIGO_GetCharField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jshort JNIGO_GetShortField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jint JNIGO_GetIntField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jlong JNIGO_GetLongField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jfloat JNIGO_GetFloatField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jdouble JNIGO_GetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID);
+//
+jobject JNIGO_GetStaticObjectField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jboolean JNIGO_GetStaticBooleanField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jbyte JNIGO_GetStaticByteField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jchar JNIGO_GetStaticCharField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jshort JNIGO_GetStaticShortField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jint JNIGO_GetStaticIntField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jlong JNIGO_GetStaticLongField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jfloat JNIGO_GetStaticFloatField(JNIEnv *env, jobject obj, jfieldID fieldID);
+jdouble JNIGO_GetStaticDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID);
+//
+//
+void JNIGO_SetVal(JNIEnv *env, jobject obj, jfieldID fieldID, jval val);
+void JNIGO_SetStaticVal(JNIEnv *env, jobject obj, jfieldID fieldID, jval val);
+//
+//
 jmethodID JNIGO_GetMethodID(JNIEnv *env, jclass clazz, const char *name,
 		const char *sig);
-
+jmethodID JNIGO_GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name,
+		const char *sig);
 //
 jobject JNIGO_CallObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
@@ -45,7 +78,26 @@ jdouble JNIGO_CallDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 void JNIGO_CallVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
-jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
+//
+jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jbyte JNIGO_CallStaticByteMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jchar JNIGO_CallStaticCharMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jint JNIGO_CallStaticIntMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jlong JNIGO_CallStaticLongMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
+		const jval *args, int len);
+void JNIGO_CallStaticVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 //
 //

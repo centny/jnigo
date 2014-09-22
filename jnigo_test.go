@@ -306,3 +306,145 @@ func TestTary(t *testing.T) {
 	es.AsDoubleAry(nil)
 	fmt.Println("----->")
 }
+
+func TestField(t *testing.T) {
+	vm := &GVM
+	clsf := vm.FindClass("jnigo/Field")
+	if clsf == nil {
+		t.Error("class not found")
+		return
+	}
+	fmt.Println(clsf.Set("zz", false))
+	fmt.Println(clsf.Set("jz", int64(11)))
+	fmt.Println(clsf.Boolean("zz"))
+	fmt.Println(clsf.Byte("bz"))
+	fmt.Println(clsf.Char("cz"))
+	fmt.Println(clsf.Short("sz"))
+	fmt.Println(clsf.Int("iz"))
+	fmt.Println(clsf.Long("jz"))
+	fmt.Println(clsf.Float("fz"))
+	fmt.Println(clsf.Double("dz"))
+	//
+	// fmt.Println(clsf.GetField("zz", "Z", false))
+	objf, err := clsf.New()
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Println(objf.Set("zz_p", false))
+	fmt.Println(objf.Set("jz_p", int64(11)))
+	fmt.Println(objf.Boolean("zz_p"))
+	fmt.Println(objf.Byte("bz_p"))
+	fmt.Println(objf.Char("cz_p"))
+	fmt.Println(objf.Short("sz_p"))
+	fmt.Println(objf.Int("iz_p"))
+	fmt.Println(objf.Long("jz_p"))
+	fmt.Println(objf.Float("fz_p"))
+	fmt.Println(objf.Double("dz_p"))
+	//
+	at, _ := clsf.Object("as", "Ljnigo/A;")
+	if at.IsNull() {
+		t.Error("is null")
+		return
+	}
+	at.CallVoid("show")
+	//
+	clsa := vm.FindClass("jnigo/A")
+	if clsa == nil {
+		t.Error("class not found")
+		return
+	}
+	av, _ := clsa.New()
+	fmt.Println(clsf.Set("as", av))
+	a, err := clsf.Object("as", "Ljnigo/A;")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	if a.IsNull() {
+		t.Error("null value")
+		return
+	}
+	// fmt.Println(a, err)
+	a.CallVoid("show")
+	//
+	zss, err := clsf.Object("zzs", "[I")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Println(zss.AsIntAry(nil))
+	//
+	ass, err := clsf.Object("ass", "[Ljnigo/A;")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	as := ass.GetObject(0)
+	as.CallVoid("show")
+	//
+	zss, err = objf.Object("zzs_p", "[I")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Println(zss.AsIntAry(nil))
+	//
+	ass, err = objf.Object("ass_p", "[Ljnigo/A;")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	as = ass.GetObject(0)
+	as.CallVoid("show")
+	//
+}
+
+func TestString(t *testing.T) {
+	vm := &GVM
+	// fmt.Println(vm.covary([]string{"vv", "va"}))
+	fmt.Println(vm.New("java/lang/String", "..."))
+	obj := vm.NewS("v")
+	// fmt.Println(obj)
+	fmt.Println(obj.ToString())
+	// fmt.Println(obj.AsStringAry(nil))
+	fmt.Println(obj.CallInt("length"))
+	// fmt.Println(obj.CallObject("toCharArray", "[C").AsCharAry(nil))
+	//
+	ary := vm.NewAryS("v1", "v2", "v3")
+	fmt.Println(ary.Len())
+	// fmt.Println(ary)
+	fmt.Println(ary.AsStringAry(nil))
+	//
+	clsa := vm.FindClass("jnigo/A")
+	obja, _ := clsa.New()
+	clss, _ := clsa.CallObject("tss", "Ljava/lang/String;")
+	objs, _ := obja.CallObject("ts", "Ljava/lang/String;")
+	fmt.Println(clss, objs)
+	// fmt.Println(objs.CallObject("toCharArray", "[C"))
+	fmt.Println(clss.AsString(), objs.AsString())
+}
+
+func TestAshow(t *testing.T) {
+	vm := &GVM
+	clsa := vm.FindClass("Ljnigo/A;")
+	obja, _ := clsa.New()
+	objv, _ := obja.As("Ljava/lang/Object;")
+	objs, _ := vm.NewAry("Ljava/lang/Object;", 1)
+	objs.SetObject(0, objv)
+	fmt.Println(obja.CallVoid("show", objv))
+	fmt.Println(obja.CallVoid("show", objs))
+	show, err := obja.CallObject("show", "Ljava/lang/String;",
+		true, Byte(1), Char(1), int16(1),
+		1, int64(1), float32(1), float64(1),
+		objv, "jjjjj", []bool{false}, []Byte{1, 2},
+		[]Char{3, 4}, []int16{11, 12}, []int{21, 22},
+		[]int64{31, 32}, []float32{41, 42}, []float64{51, 52},
+		objs, []string{"aaa", "bbb"},
+	)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Println(show.ToString())
+}

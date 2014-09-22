@@ -4,6 +4,7 @@
 echo "Setting Environments"
 set -e
 export PATH=$PATH:$GOPATH/bin:$HOME/bin:$GOROOT/bin
+export LD_LIBRARY_PATH=/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/jre/lib/server
 ##############################
 ######Install Dependence######
 echo "Installing Dependence"
