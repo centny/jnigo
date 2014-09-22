@@ -13,7 +13,7 @@ go get github.com/Centny/jnigo
 ```
 #Example
 
-```java
+```go
 
 func ExampleJvm() {
 	Init("-Djava.class.path=java/bin")
