@@ -4,13 +4,30 @@ JNI-GO
 
 ===
 #Install
-```
-export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/<darwin/win/linux>"
+* install jdk (install mingw with gcc on window)
+* go get:
 
-export CGO_LDFLAGS="-I$JAVA_HOME/jre/lib/server"
+linux/unix/osx:
 
-go get github.com/Centny/jnigo
+ ```
+export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/<darwin/linux>"
+
+export CGO_LDFLAGS="-I$JAVA_HOME/jre/lib/server -ljvm"
+
+go get github.com/Centny/jnigo	
 ```
+
+win32:
+
+```
+export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/win32"
+
+export CGO_LDFLAGS="-I$JAVA_HOME/lib -ljvm"
+
+go get github.com/Centny/jnigo	
+```
+
+
 #Example
 
 ```go
