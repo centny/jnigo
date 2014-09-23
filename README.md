@@ -20,9 +20,9 @@ go get github.com/Centny/jnigo
 win32:
 
 ```
-export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/win32"
+set CGO_CFLAGS="-I%JAVA_HOME%/include/ -I%JAVA_HOME%/include/win32"
 
-export CGO_LDFLAGS="-I$JAVA_HOME/lib -ljvm"
+set CGO_LDFLAGS="-I%JAVA_HOME%/lib -ljvm"
 
 go get github.com/Centny/jnigo	
 ```
