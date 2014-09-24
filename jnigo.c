@@ -62,6 +62,12 @@ jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
 		return (*env)->NewObjectA(env, clazz, methodID, 0);
 	}
 }
+jthrowable JNIGO_ExceptionOccurred(JNIEnv *env) {
+	return (*env)->ExceptionOccurred(env);
+}
+void JNIGO_ExceptionClear(JNIEnv *env) {
+	return (*env)->ExceptionClear(env);
+}
 //
 //
 jfieldID JNIGO_GetFieldID(JNIEnv *env, jclass clazz, const char *name,
@@ -302,8 +308,8 @@ void JNIGO_CallVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 	}
 }
 //
-jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len) {
+jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);
@@ -312,8 +318,8 @@ jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj, jmethodID method
 		return (*env)->CallStaticObjectMethodA(env, obj, methodID, 0);
 	}
 }
-jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len) {
+jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);
@@ -342,8 +348,8 @@ jchar JNIGO_CallStaticCharMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		return (*env)->CallStaticCharMethodA(env, obj, methodID, 0);
 	}
 }
-jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len) {
+jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);
@@ -372,8 +378,8 @@ jlong JNIGO_CallStaticLongMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		return (*env)->CallStaticLongMethodA(env, obj, methodID, 0);
 	}
 }
-jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len) {
+jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);
@@ -382,8 +388,8 @@ jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj, jmethodID methodID
 		return (*env)->CallStaticFloatMethodA(env, obj, methodID, 0);
 	}
 }
-jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len) {
+jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len) {
 	if (len > 0) {
 		jvalue vals[len];
 		covjval(vals, args, len);

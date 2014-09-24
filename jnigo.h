@@ -21,6 +21,8 @@ jclass JNIGO_FindClass(JNIEnv *env, const char *name);
 jint JNIGO_DestroyJavaVM(JavaVM *vm);
 jobject JNIGO_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
 		const jval *args, int len);
+jthrowable JNIGO_ExceptionOccurred(JNIEnv *env);
+void JNIGO_ExceptionClear(JNIEnv *env);
 //
 //
 jfieldID JNIGO_GetFieldID(JNIEnv *env, jclass clazz, const char *name,
@@ -79,24 +81,24 @@ jdouble JNIGO_CallDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 void JNIGO_CallVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 //
-jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len);
-jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len);
+jobject JNIGO_CallStaticObjectMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len);
+jboolean JNIGO_CallStaticBooleanMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len);
 jbyte JNIGO_CallStaticByteMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 jchar JNIGO_CallStaticCharMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
-jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len);
+jshort JNIGO_CallStaticShortMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len);
 jint JNIGO_CallStaticIntMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 jlong JNIGO_CallStaticLongMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
-jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len);
-jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
-		const jval *args, int len);
+jfloat JNIGO_CallStaticFloatMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len);
+jdouble JNIGO_CallStaticDoubleMethodA(JNIEnv *env, jobject obj,
+		jmethodID methodID, const jval *args, int len);
 void JNIGO_CallStaticVoidMethodA(JNIEnv *env, jobject obj, jmethodID methodID,
 		const jval *args, int len);
 //

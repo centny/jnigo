@@ -33,7 +33,7 @@ func args_t(t *testing.T, vm *Jvm, tsig string, args ...interface{}) {
 }
 
 func TestCovArgs(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	vm.Show()
 	args_t(t, vm, "II", 1, 1)
 	args_t(t, vm, "IZ", 1, true)
@@ -62,10 +62,11 @@ func TestCovArgs(t *testing.T) {
 	// 	return
 	// }
 	// fmt.Println(err.Error())
+	fmt.Println("TestCovArgs-------->")
 }
 
 func TestStaticM(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	cls := vm.FindClass("jnigo/StaticM")
 	if cls == nil {
 		t.Error("class not found")
@@ -110,10 +111,12 @@ func TestStaticM(t *testing.T) {
 	fmt.Println(cls.CallLong("getj", ""))
 	fmt.Println(cls.CallFloat("getf", ""))
 	fmt.Println(cls.CallDouble("getd", ""))
+	//
+	fmt.Println("TestStaticM-------->")
 }
 
 func TestObjectM(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	cls := vm.FindClass("jnigo/ObjectM")
 	if cls == nil {
 		t.Error("class not found")
@@ -173,9 +176,11 @@ func TestObjectM(t *testing.T) {
 	fmt.Println(obj.CallLong("getj", ""))
 	fmt.Println(obj.CallFloat("getf", ""))
 	fmt.Println(obj.CallDouble("getd", ""))
+	//
+	fmt.Println("TestObjectM-------->")
 }
 func TestArray(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	clsa := vm.FindClass("jnigo/A")
 	if clsa == nil {
 		t.Error("class not found")
@@ -193,9 +198,11 @@ func TestArray(t *testing.T) {
 	objary, _ := clsary.New()
 	// fmt.Println(vm.CovArgs([]Object{obja, objb}))
 	fmt.Println(objary.CallVoid("show", []Object{*obja, *objb}))
+	//
+	fmt.Println("TestArray-------->")
 }
 func TestAbc(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	clsa := vm.FindClass("jnigo/A")
 	if clsa == nil {
 		t.Error("class not found")
@@ -243,10 +250,12 @@ func TestAbc(t *testing.T) {
 	objc.CallVoid("setAs", []Object{*obja_0, *obja_1})
 	fmt.Println(objc.CallObject("getAs", "[Ljnigo/A;"))
 	objc.CallVoid("showas")
+	//
+	fmt.Println("TestAbc-------->")
 }
 
 func TestTary(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	clsta := vm.FindClass("jnigo/Tary")
 	if clsta == nil {
 		t.Error("class not found")
@@ -306,10 +315,11 @@ func TestTary(t *testing.T) {
 	es.AsFloatAry(nil)
 	es.AsDoubleAry(nil)
 	fmt.Println("----->")
+	fmt.Println("TestTary-------->")
 }
 
 func TestField(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	clsf := vm.FindClass("jnigo/Field")
 	if clsf == nil {
 		t.Error("class not found")
@@ -399,10 +409,11 @@ func TestField(t *testing.T) {
 	as = ass.GetObject(0)
 	as.CallVoid("show")
 	//
+	fmt.Println("TestField-------->")
 }
 
 func TestString(t *testing.T) {
-	vm := &GVM
+	vm := GVM
 	// fmt.Println(vm.covary([]string{"vv", "va"}))
 	fmt.Println(vm.New("java/lang/String", "..."))
 	obj := vm.NewS("v")
@@ -424,6 +435,8 @@ func TestString(t *testing.T) {
 	fmt.Println(clss, objs)
 	// fmt.Println(objs.CallObject("toCharArray", "[C"))
 	fmt.Println(clss.AsString(), objs.AsString())
+	//
+	fmt.Println("TestString-------->")
 }
 
 func TestAshow(t *testing.T) {
@@ -461,7 +474,32 @@ func TestAshow(t *testing.T) {
 		return
 	}
 	fmt.Println(show.ToString())
+	fmt.Println("TestAshow-------->")
 }
+func TestNew(t *testing.T) {
+	fis, err := GVM.New("java.io.FileInputStream", "sssss")
+	fmt.Println(fis, err)
+	// fmt.Println(fis.jobj)
+	GVM.ExceptionClear()
+	GVM.ExceptionOccurred()
+	fmt.Println("TestNew-------->")
+}
+
+func TestT(t *testing.T) {
+	ary, err := GVM.New("java.util.ArrayList")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	fmt.Println(ary.CallBoolean("add", GVM.NewS("arg").AsObject()))
+	fmt.Println(ary.ToString())
+	fmt.Println(ary.AsObject())
+}
+
+// func TestCreateClassPath(t *testing.T) {
+// fmt.Println(util.List("/Users/cny/Tmp/HH/poi", "^.*$"))
+// fmt.Println(CreateClassPath("/Users/cny/Tmp/HH/poi"))
+// }
 
 // func TestExample(t *testing.T) {
 // 	// Init("-Djava.class.path=java/bin")

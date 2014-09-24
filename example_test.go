@@ -52,7 +52,8 @@ func ExampleCovertType() {
 		[]string{"aaa"},   //for java String[]
 	)
 	if err != nil {
-		t.Error(err.Error())
+		panic(err.Error())
 		return
 	}
+	fmt.Println(show.AsString())
 }

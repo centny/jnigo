@@ -5,15 +5,17 @@ package jnigo
 #include <stdlib.h>
 #include <jni.h>
 #include "jnigo.h"
-//#cgo darwin CFLAGS:
-#cgo darwin LDFLAGS: -ljvm
+#cgo darwin CFLAGS: -I/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/include -I/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/include/darwin
+#cgo darwin LDFLAGS: -L/Library/Java/JavaVirtualMachines/jdk1.7.0_65.jdk/Contents/Home/jre/lib/server -ljvm
 */
 import "C"
 import (
 	"fmt"
+	"github.com/Centny/Cny4go/util"
 	"os"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"unsafe"
 )
@@ -56,7 +58,7 @@ type Byte byte
 type EmptyObjAry string
 
 //
-var sig_m *regexp.Regexp = regexp.MustCompile("^[ZBCSIJFDL\\[].*$")
+var sig_m *regexp.Regexp = regexp.MustCompile("^[ZBCSIJFDLV\\[].*$")
 
 //
 //
@@ -80,18 +82,43 @@ type VMOption struct {
 	OptionString string
 }
 
-var GVM Jvm
+var GVM *Jvm = nil
 
 func Init(os ...string) int {
-	GVM.Version = JNI_VERSION_1_6
-	GVM.IgnoreUnrecognized = true
+	vm := &Jvm{}
+	vm.Version = JNI_VERSION_1_6
+	vm.IgnoreUnrecognized = true
 	for _, o := range os {
-		GVM.AddVMOption2(o)
+		vm.AddVMOption2(o)
 	}
-	return int(GVM.Init())
+	res := int(vm.Init())
+	if res == JNI_OK {
+		GVM = vm
+	}
+	return res
 }
 func Destory() int {
-	return int(GVM.Destroy())
+	if GVM == nil {
+		return int(GVM.Destroy())
+	} else {
+		return -1
+	}
+}
+func NewClassPathOption(ps ...string) string {
+	cps := []string{}
+	for _, p := range ps {
+		util.ListFunc(p, "^.*\\.jar$", func(t string) string {
+			cps = append(cps, t)
+			return ""
+		})
+
+	}
+	switch runtime.GOOS {
+	case "windows":
+		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(cps, ";"))
+	default:
+		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(cps, ":"))
+	}
 }
 
 type Jvm struct {
@@ -433,6 +460,13 @@ func (j *Jvm) New(name string, args ...interface{}) (*Object, error) {
 	}
 	return cls.New(args...)
 }
+func (j *Jvm) NewAs(name string, as string, args ...interface{}) (*Object, error) {
+	obj, err := j.New(name, args...)
+	if err != nil {
+		return nil, err
+	}
+	return obj.As(as)
+}
 func (j *Jvm) NewS(arg string) *Object {
 	str, _ := j.New("Ljava/lang/String;", arg)
 	return str
@@ -459,6 +493,44 @@ func (j *Jvm) NewAryS(args ...string) *Object {
 		jobj: vals,
 	}
 }
+func (j *Jvm) ExceptionOccurred() *Exception {
+	res := C.JNIGO_ExceptionOccurred(j.env)
+	defer j.ExceptionClear()
+	if res == nil {
+		return nil
+	} else {
+		return &Exception{
+			Object: &Object{
+				Vm:   j,
+				Cls:  j.FindClass("java.lang.Throwable"),
+				jobj: C.jobject(res),
+			},
+		}
+	}
+}
+func (j *Jvm) ExceptionClear() {
+	C.JNIGO_ExceptionClear(j.env)
+}
+
+//check occurred error.
+func (j *Jvm) ChkErr() error {
+	res := j.ExceptionOccurred()
+	if res == nil {
+		return nil
+	} else {
+		return res
+	}
+}
+
+//check occurred error, if not error return unknow error.
+func (j *Jvm) ChkErrUnknow() error {
+	res := j.ExceptionOccurred()
+	if res == nil {
+		return Err("unknow error")
+	} else {
+		return res
+	}
+}
 
 type Class struct {
 	Vm   *Jvm
@@ -468,6 +540,7 @@ type Class struct {
 }
 
 func (c *Class) GetMethod(name, arg_sig, ret_sig string, static bool) *Method {
+	ret_sig = c.Vm.SigName(ret_sig)
 	cname, csig := C.CString(name), C.CString(fmt.Sprintf("(%s)%s", arg_sig, ret_sig))
 	defer C.free(unsafe.Pointer(cname))
 	defer C.free(unsafe.Pointer(csig))
@@ -492,7 +565,7 @@ func (c *Class) GetMethod(name, arg_sig, ret_sig string, static bool) *Method {
 	}
 }
 func (c *Class) GetField(name, sig string, static bool) *Field {
-	cname, csig := C.CString(name), C.CString(sig)
+	cname, csig := C.CString(name), C.CString(c.Vm.SigName(sig))
 	defer C.free(unsafe.Pointer(cname))
 	defer C.free(unsafe.Pointer(csig))
 	var fid C.jfieldID
@@ -538,6 +611,17 @@ func (c *Class) CallObject(name, ret_sig string, args ...interface{}) (*Object, 
 	}
 	return m.CallObjectMethodA(vals)
 }
+func (c *Class) CallString(name string, args ...interface{}) (string, error) {
+	sig, vals, err := c.Vm.CovArgs(args...)
+	if err != nil {
+		return "", err
+	}
+	m := c.GetMethod(name, sig, "Ljava/lang/String;", true)
+	if m == nil {
+		return "", Err("method(%s) not found by sig:(%s)%s", name, sig, "Ljava/lang/String;")
+	}
+	return m.CallStringMethodA(vals)
+}
 func (c *Class) CallVoid(name string, args ...interface{}) error {
 	sig, vals, err := c.Vm.CovArgs(args...)
 	if err != nil {
@@ -559,7 +643,7 @@ func (c *Class) CallBoolean(name string, args ...interface{}) (bool, error) {
 	if m == nil {
 		return false, Err("method(%s) not found by sig:(%s)%s", name, sig, "Z")
 	}
-	return m.CallBooleanMethodA(vals), nil
+	return m.CallBooleanMethodA(vals)
 }
 func (c *Class) CallByte(name string, args ...interface{}) (byte, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -570,7 +654,7 @@ func (c *Class) CallByte(name string, args ...interface{}) (byte, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "B")
 	}
-	return m.CallByteMethodA(vals), nil
+	return m.CallByteMethodA(vals)
 }
 func (c *Class) CallChar(name string, args ...interface{}) (byte, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -581,7 +665,7 @@ func (c *Class) CallChar(name string, args ...interface{}) (byte, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "C")
 	}
-	return m.CallCharMethodA(vals), nil
+	return m.CallCharMethodA(vals)
 }
 func (c *Class) CallShort(name string, args ...interface{}) (int16, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -592,7 +676,7 @@ func (c *Class) CallShort(name string, args ...interface{}) (int16, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "S")
 	}
-	return m.CallShortMethodA(vals), nil
+	return m.CallShortMethodA(vals)
 }
 func (c *Class) CallInt(name string, args ...interface{}) (int, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -603,7 +687,7 @@ func (c *Class) CallInt(name string, args ...interface{}) (int, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "I")
 	}
-	return m.CallIntMethodA(vals), nil
+	return m.CallIntMethodA(vals)
 }
 func (c *Class) CallLong(name string, args ...interface{}) (int64, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -614,7 +698,7 @@ func (c *Class) CallLong(name string, args ...interface{}) (int64, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "J")
 	}
-	return m.CallLongMethodA(vals), nil
+	return m.CallLongMethodA(vals)
 }
 func (c *Class) CallFloat(name string, args ...interface{}) (float32, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -625,7 +709,7 @@ func (c *Class) CallFloat(name string, args ...interface{}) (float32, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "F")
 	}
-	return m.CallFloatMethodA(vals), nil
+	return m.CallFloatMethodA(vals)
 }
 func (c *Class) CallDouble(name string, args ...interface{}) (float64, error) {
 	sig, vals, err := c.Vm.CovArgs(args...)
@@ -636,7 +720,7 @@ func (c *Class) CallDouble(name string, args ...interface{}) (float64, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "D")
 	}
-	return m.CallDoubleMethodA(vals), nil
+	return m.CallDoubleMethodA(vals)
 }
 
 //
@@ -774,6 +858,17 @@ func (o *Object) CallObject(name, ret_sig string, args ...interface{}) (*Object,
 	}
 	return m.CallObjectMethodA(vals)
 }
+func (o *Object) CallString(name string, args ...interface{}) (string, error) {
+	sig, vals, err := o.Vm.CovArgs(args...)
+	if err != nil {
+		return "", err
+	}
+	m := o.GetMethod(name, sig, "Ljava/lang/String;")
+	if m == nil {
+		return "", Err("method(%s) not found by sig:(%s)%s", name, sig, "Ljava/lang/String;")
+	}
+	return m.CallStringMethodA(vals)
+}
 func (o *Object) CallVoid(name string, args ...interface{}) error {
 	sig, vals, err := o.Vm.CovArgs(args...)
 	if err != nil {
@@ -795,7 +890,7 @@ func (o *Object) CallBoolean(name string, args ...interface{}) (bool, error) {
 	if m == nil {
 		return false, Err("method(%s) not found by sig:(%s)%s", name, sig, "Z")
 	}
-	return m.CallBooleanMethodA(vals), nil
+	return m.CallBooleanMethodA(vals)
 }
 func (o *Object) CallByte(name string, args ...interface{}) (byte, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -806,7 +901,7 @@ func (o *Object) CallByte(name string, args ...interface{}) (byte, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "B")
 	}
-	return m.CallByteMethodA(vals), nil
+	return m.CallByteMethodA(vals)
 }
 func (o *Object) CallChar(name string, args ...interface{}) (byte, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -817,7 +912,7 @@ func (o *Object) CallChar(name string, args ...interface{}) (byte, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "C")
 	}
-	return m.CallCharMethodA(vals), nil
+	return m.CallCharMethodA(vals)
 }
 func (o *Object) CallShort(name string, args ...interface{}) (int16, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -828,7 +923,7 @@ func (o *Object) CallShort(name string, args ...interface{}) (int16, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "S")
 	}
-	return m.CallShortMethodA(vals), nil
+	return m.CallShortMethodA(vals)
 }
 func (o *Object) CallInt(name string, args ...interface{}) (int, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -839,7 +934,7 @@ func (o *Object) CallInt(name string, args ...interface{}) (int, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "I")
 	}
-	return m.CallIntMethodA(vals), nil
+	return m.CallIntMethodA(vals)
 }
 func (o *Object) CallLong(name string, args ...interface{}) (int64, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -850,7 +945,7 @@ func (o *Object) CallLong(name string, args ...interface{}) (int64, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "J")
 	}
-	return m.CallLongMethodA(vals), nil
+	return m.CallLongMethodA(vals)
 }
 func (o *Object) CallFloat(name string, args ...interface{}) (float32, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -861,7 +956,7 @@ func (o *Object) CallFloat(name string, args ...interface{}) (float32, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "F")
 	}
-	return m.CallFloatMethodA(vals), nil
+	return m.CallFloatMethodA(vals)
 }
 func (o *Object) CallDouble(name string, args ...interface{}) (float64, error) {
 	sig, vals, err := o.Vm.CovArgs(args...)
@@ -872,7 +967,7 @@ func (o *Object) CallDouble(name string, args ...interface{}) (float64, error) {
 	if m == nil {
 		return 0, Err("method(%s) not found by sig:(%s)%s", name, sig, "D")
 	}
-	return m.CallDoubleMethodA(vals), nil
+	return m.CallDoubleMethodA(vals)
 }
 
 //
@@ -986,6 +1081,10 @@ func (o *Object) AsString() string {
 	} else {
 		return string(bys.AsCharAry(nil))
 	}
+}
+func (o *Object) AsObject() *Object {
+	obj, _ := o.As("Ljava.lang.Object;")
+	return obj
 }
 func (o *Object) ToString() string {
 	ss, err := o.CallObject("toString", "Ljava/lang/String;")
@@ -1135,6 +1234,18 @@ func (o *Object) AsDoubleAry(f func(o *Object, i int, v float64)) []float64 {
 }
 
 ///////////
+type Exception struct {
+	*Object
+}
+
+func (e *Exception) Error() string {
+	return e.ToString()
+}
+func (e *Exception) Print() {
+	e.CallVoid("printStackTrace")
+}
+
+///////////
 
 type Method struct {
 	Vm     *Jvm
@@ -1154,6 +1265,17 @@ func (m *Method) tobj() C.jobject {
 		return m.Obj.jobj
 	}
 }
+func (m *Method) ret_obj(cls *Class, res C.jobject) (*Object, error) {
+	if res == nil {
+		return nil, m.Vm.ChkErrUnknow()
+	} else {
+		return &Object{
+			Vm:   m.Vm,
+			Cls:  cls,
+			jobj: res,
+		}, nil
+	}
+}
 func (m *Method) FindRetClass() *Class {
 	return m.Vm.FindClass(m.RetSig)
 }
@@ -1169,12 +1291,7 @@ func (m *Method) call_args(vals []Jval) (*C.JNIEnv, C.jobject, C.jmethodID, *C.j
 	return m.Vm.env, m.tobj(), m.mid, tval, C.int(len(rvals))
 }
 func (m *Method) newObjectA(vals []Jval) (*Object, error) {
-	res := C.JNIGO_NewObjectA(m.call_args(vals))
-	return &Object{
-		Vm:   m.Vm,
-		Cls:  m.Cls,
-		jobj: res,
-	}, nil
+	return m.ret_obj(m.Cls, C.JNIGO_NewObjectA(m.call_args(vals)))
 }
 func (m *Method) CallObjectMethodA(vals []Jval) (*Object, error) {
 	cls := m.FindRetClass()
@@ -1182,80 +1299,81 @@ func (m *Method) CallObjectMethodA(vals []Jval) (*Object, error) {
 		return nil, Err("invalid return class:%s", m.RetSig)
 	}
 	if m.Obj == nil {
-		return &Object{
-			Vm:   m.Vm,
-			Cls:  cls,
-			jobj: C.JNIGO_CallStaticObjectMethodA(m.call_args(vals)),
-		}, nil
+		return m.ret_obj(cls, C.JNIGO_CallStaticObjectMethodA(m.call_args(vals)))
 	} else {
-		return &Object{
-			Vm:   m.Vm,
-			Cls:  cls,
-			jobj: C.JNIGO_CallObjectMethodA(m.call_args(vals)),
-		}, nil
+		return m.ret_obj(cls, C.JNIGO_CallObjectMethodA(m.call_args(vals)))
 	}
 }
-func (m *Method) CallVoidMethodA(vals []Jval) {
+func (m *Method) CallStringMethodA(vals []Jval) (string, error) {
+	as, err := m.CallObjectMethodA(vals)
+	if err == nil {
+		return as.AsString(), nil
+	} else {
+		return "", err
+	}
+}
+func (m *Method) CallVoidMethodA(vals []Jval) error {
 	if m.Obj == nil {
 		C.JNIGO_CallStaticVoidMethodA(m.call_args(vals))
 	} else {
 		C.JNIGO_CallVoidMethodA(m.call_args(vals))
 	}
+	return m.Vm.ChkErr()
 }
-func (m *Method) CallBooleanMethodA(vals []Jval) bool {
+func (m *Method) CallBooleanMethodA(vals []Jval) (bool, error) {
 	if m.Obj == nil {
-		return C.JNIGO_CallStaticBooleanMethodA(m.call_args(vals)) == JNI_TRUE
+		return C.JNIGO_CallStaticBooleanMethodA(m.call_args(vals)) == JNI_TRUE, m.Vm.ChkErr()
 	} else {
-		return C.JNIGO_CallBooleanMethodA(m.call_args(vals)) == JNI_TRUE
+		return C.JNIGO_CallBooleanMethodA(m.call_args(vals)) == JNI_TRUE, m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallByteMethodA(vals []Jval) byte {
+func (m *Method) CallByteMethodA(vals []Jval) (byte, error) {
 	if m.Obj == nil {
-		return byte(C.JNIGO_CallStaticByteMethodA(m.call_args(vals)))
+		return byte(C.JNIGO_CallStaticByteMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return byte(C.JNIGO_CallByteMethodA(m.call_args(vals)))
+		return byte(C.JNIGO_CallByteMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallCharMethodA(vals []Jval) byte {
+func (m *Method) CallCharMethodA(vals []Jval) (byte, error) {
 	if m.Obj == nil {
-		return byte(C.JNIGO_CallStaticCharMethodA(m.call_args(vals)))
+		return byte(C.JNIGO_CallStaticCharMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return byte(C.JNIGO_CallCharMethodA(m.call_args(vals)))
+		return byte(C.JNIGO_CallCharMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallShortMethodA(vals []Jval) int16 {
+func (m *Method) CallShortMethodA(vals []Jval) (int16, error) {
 	if m.Obj == nil {
-		return int16(C.JNIGO_CallStaticShortMethodA(m.call_args(vals)))
+		return int16(C.JNIGO_CallStaticShortMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return int16(C.JNIGO_CallShortMethodA(m.call_args(vals)))
+		return int16(C.JNIGO_CallShortMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallIntMethodA(vals []Jval) int {
+func (m *Method) CallIntMethodA(vals []Jval) (int, error) {
 	if m.Obj == nil {
-		return int(C.JNIGO_CallStaticIntMethodA(m.call_args(vals)))
+		return int(C.JNIGO_CallStaticIntMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return int(C.JNIGO_CallIntMethodA(m.call_args(vals)))
+		return int(C.JNIGO_CallIntMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallLongMethodA(vals []Jval) int64 {
+func (m *Method) CallLongMethodA(vals []Jval) (int64, error) {
 	if m.Obj == nil {
-		return int64(C.JNIGO_CallStaticLongMethodA(m.call_args(vals)))
+		return int64(C.JNIGO_CallStaticLongMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return int64(C.JNIGO_CallLongMethodA(m.call_args(vals)))
+		return int64(C.JNIGO_CallLongMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallFloatMethodA(vals []Jval) float32 {
+func (m *Method) CallFloatMethodA(vals []Jval) (float32, error) {
 	if m.Obj == nil {
-		return float32(C.JNIGO_CallStaticFloatMethodA(m.call_args(vals)))
+		return float32(C.JNIGO_CallStaticFloatMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return float32(C.JNIGO_CallFloatMethodA(m.call_args(vals)))
+		return float32(C.JNIGO_CallFloatMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
-func (m *Method) CallDoubleMethodA(vals []Jval) float64 {
+func (m *Method) CallDoubleMethodA(vals []Jval) (float64, error) {
 	if m.Obj == nil {
-		return float64(C.JNIGO_CallStaticDoubleMethodA(m.call_args(vals)))
+		return float64(C.JNIGO_CallStaticDoubleMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	} else {
-		return float64(C.JNIGO_CallDoubleMethodA(m.call_args(vals)))
+		return float64(C.JNIGO_CallDoubleMethodA(m.call_args(vals))), m.Vm.ChkErr()
 	}
 }
 
