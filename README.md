@@ -12,7 +12,7 @@ linux/unix/osx:
  ```
 export CGO_CFLAGS="-I$JAVA_HOME/include/ -I$JAVA_HOME/include/<darwin/linux>"
 
-export CGO_LDFLAGS="-I$JAVA_HOME/jre/lib/server -ljvm"
+export CGO_LDFLAGS="-L$JAVA_HOME/jre/lib/server -ljvm"
 
 go get github.com/Centny/jnigo	
 ```
