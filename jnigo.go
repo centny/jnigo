@@ -104,20 +104,36 @@ func Destory() int {
 		return -1
 	}
 }
-func NewClassPathOption(ps ...string) string {
-	cps := []string{}
-	for _, p := range ps {
-		util.ListFunc(p, "^.*\\.jar$", func(t string) string {
-			cps = append(cps, t)
-			return ""
-		})
 
+func NewClassPath() *ClassPath {
+	return &ClassPath{
+		Paths: []string{},
 	}
+}
+
+type ClassPath struct {
+	Paths []string
+}
+
+func (c *ClassPath) Option() string {
 	switch runtime.GOOS {
 	case "windows":
-		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(cps, ";"))
+		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(c.Paths, ";"))
 	default:
-		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(cps, ":"))
+		return fmt.Sprintf("-Djava.class.path=%s", strings.Join(c.Paths, ":"))
+	}
+}
+func (c *ClassPath) AddPath(ps ...string) {
+	for _, p := range ps {
+		util.ListFunc(p, "^.*\\.jar$", func(t string) string {
+			c.Paths = append(c.Paths, t)
+			return ""
+		})
+	}
+}
+func (c *ClassPath) AddFloder(ps ...string) {
+	for _, p := range ps {
+		c.Paths = append(c.Paths, p)
 	}
 }
 
@@ -320,7 +336,7 @@ func (j *Jvm) covstr_b(arg interface{}) (string, C.jobject, error) {
 	}
 }
 func (j *Jvm) covstr(arg string) (string, C.jobject, error) {
-	return j.covstr_b(ToChar([]byte(arg)))
+	return j.covstr_b(ToByte([]byte(arg)))
 }
 func (j *Jvm) covval(arg interface{}) (string, C.jval, error) {
 	var _bval_ Byte
@@ -1074,12 +1090,12 @@ func (o *Object) SetObject(idx int, v *Object) {
 	C.JNIGO_SetObjectArrayElement(o.Vm.env, C.jobjectArray(o.jobj), C.jsize(idx), v.jobj)
 }
 func (o *Object) AsString() string {
-	bys, err := o.CallObject("toCharArray", "[C")
+	bys, err := o.CallObject("getBytes", "[B", "UTF-8")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return ""
 	} else {
-		return string(bys.AsCharAry(nil))
+		return string(bys.AsByteAry(nil))
 	}
 }
 func (o *Object) AsObject() *Object {

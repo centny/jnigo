@@ -495,6 +495,12 @@ func TestT(t *testing.T) {
 	fmt.Println(ary.ToString())
 	fmt.Println(ary.AsObject())
 }
+func TestClassPath(t *testing.T) {
+	cls := NewClassPath()
+	cls.AddPath("/Users/cny/Tmp/HH/poi")
+	cls.AddFloder("java/bin")
+	fmt.Println(cls.Option())
+}
 
 // func TestCreateClassPath(t *testing.T) {
 // fmt.Println(util.List("/Users/cny/Tmp/HH/poi", "^.*$"))
