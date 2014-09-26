@@ -30,57 +30,94 @@ void JNIGO_destory() {
 //void JNIGO_free(void **p) {
 //	jvm_g.free((VmObj**) p);
 //}
-struct c_err JNIGO_errOccurred() {
+c_object JNIGO_errOccurred() {
 	return jvm_g.errOccurred().toc();
 }
 void JNIGO_errClear() {
 	jvm_g.errClear();
 }
+c_object JNIGO_newAry(const char* sig, int len) {
+	return jvm_g.newAry(string(sig), len).toc();
+}
 //
-struct c_class JNIGO_findClass(const char* name) {
+c_class JNIGO_findClass(const char* name) {
 	return jvm_g.findClass(string(name)).toc();
 }
 //
-struct c_method JNIGO_findClsMethod(struct c_class cls, const char* name, const char* vsig,
+c_method JNIGO_findClsMethod(c_class cls, const char* name, const char* vsig,
 		const char* rsig, int static_) {
 	Class rcls;
 	rcls.fromc(cls);
 	return rcls.findMethod(string(name), string(vsig), string(rsig), static_).toc();
 }
-struct c_field JNIGO_findClsField(struct c_class cls, const char* name, const char* rsig,
+c_field JNIGO_findClsField(c_class cls, const char* name, const char* rsig,
 		int static_) {
 	Class rcls;
 	rcls.fromc(cls);
 	return rcls.findField(string(name), string(rsig), static_).toc();
 }
-struct c_method JNIGO_findObjMethod(struct c_object obj, const char* name, const char* vsig,
+c_method JNIGO_findObjMethod(c_object obj, const char* name, const char* vsig,
 		const char* rsig) {
 	Object robj;
 	robj.fromc(obj);
 	return robj.findMethod(string(name), string(vsig), string(rsig)).toc();
 }
-struct c_field JNIGO_findObjField(struct c_object obj, const char* name, const char* rsig) {
+c_field JNIGO_findObjField(c_object obj, const char* name, const char* rsig) {
 	Object robj;
 	robj.fromc(obj);
 	return robj.findField(string(name), string(rsig)).toc();
 }
+int JNIGO_len(c_object obj) {
+	Object robj;
+	robj.fromc(obj);
+	return robj.len();
+}
+void JNIGO_cary(c_object obj, void* buf, int idx, int len) {
+	Object robj;
+	robj.fromc(obj);
+	robj.cary(buf, idx, len);
+}
+void JNIGO_sary(c_object obj, void* buf, int idx, int len) {
+	Object robj;
+	robj.fromc(obj);
+	robj.sary(buf, idx, len);
+}
 //
-struct c_object JNIGO_newA(struct c_method m, const struct jval * args, int len) {
+c_object JNIGO_newS(const jbyte* bys, int len) {
+	return jvm_g.newS(bys, len).toc();
+}
+c_object JNIGO_newA(c_method m, const jval * args, int len) {
 	Method rm;
 	rm.fromc(m);
 	return rm.newA(args, len).toc();
 }
-struct c_object JNIGO_callA(struct c_method m, const struct jval * args, int len) {
+c_object JNIGO_callA(c_method m, const jval * args, int len) {
 	Method rm;
 	rm.fromc(m);
 	return rm.callA(args, len).toc();
 }
-struct c_object JNIGO_get(struct c_field f) {
+c_object JNIGO_callA_o(c_object obj, const char* name, const char* vsig,
+		const char* rsig, const jval * args, int len) {
+	Object robj;
+	robj.fromc(obj);
+	return robj.callA(string(name), string(vsig), string(rsig), args, len).toc();
+}
+c_object JNIGO_get(c_field f) {
 	Field rf;
 	rf.fromc(f);
 	return rf.get().toc();
 }
-void JNIGO_set(struct c_field f, struct jval arg) {
+c_object JNIGO_get_o(c_object obj, int idx) {
+	Object robj;
+	robj.fromc(obj);
+	return robj.get(idx).toc();
+}
+void JNIGO_set_o(c_object obj, int idx, jval v) {
+	Object robj;
+	robj.fromc(obj);
+	robj.set(idx, v);
+}
+void JNIGO_set(c_field f, jval arg) {
 	Field rf;
 	rf.fromc(f);
 	rf.set(arg);

@@ -48,14 +48,14 @@ void VmObj::init(JVM *jvm, string msg) {
 	this->valid = msg.size() == 0;
 	this->msg = msg;
 }
-void VmObj::fromc_(struct c_vmo c) {
+void VmObj::fromc_(c_vmo c) {
 	this->jvm = (JavaVM *) c.jvm;
 	this->env = (JNIEnv *) c.env;
 	this->msg = string(c.msg);
 	this->valid = c.valid;
 }
-struct c_vmo VmObj::toc_() {
-	struct c_vmo vmo;
+c_vmo VmObj::toc_() {
+	c_vmo vmo;
 	vmo.jvm = this->jvm;
 	vmo.env = this->env;
 	vmo.valid = this->valid;
@@ -63,22 +63,22 @@ struct c_vmo VmObj::toc_() {
 	vmo.msg[this->msg.size()] = 0;
 	return vmo;
 }
-Err::Err() {
-	this->jvm = 0;
-	this->err = 0;
-}
-void Err::fromc(struct c_err c) {
-	this->fromc_(c.vmo);
-	this->err = c.err;
-	this->jvm = (JVM*) c.jvm;
-}
-struct c_err Err::toc() {
-	struct c_err c;
-	c.err = this->err;
-	c.jvm = this->jvm;
-	c.vmo = this->toc_();
-	return c;
-}
+//Err::Err() {
+//	this->jvm = 0;
+//	this->err = 0;
+//}
+//void Err::fromc(c_err c) {
+//	this->fromc_(c.vmo);
+//	this->err = c.err;
+//	this->jvm = (JVM*) c.jvm;
+//}
+//c_err Err::toc() {
+//	c_err c;
+//	c.err = this->err;
+//	c.jvm = this->jvm;
+//	c.vmo = this->toc_();
+//	return c;
+//}
 /* ------ JVM ------ */
 JVM::JVM() {
 	this->valid = false;
@@ -145,11 +145,14 @@ Class JVM::findClass(string name) {
 	}
 	return ncls;
 }
-Err JVM::errOccurred() {
-	Err err;
+Object JVM::errOccurred() {
+	Object err;
 	err.jvm = this;
+	err.sig = "Ljava/lang/Throwable;";
+	err.cls = this->findClass(err.sig);
 	if (this->env->ExceptionCheck()) {
-		err.err = this->env->ExceptionOccurred();
+		err.val.l = this->env->ExceptionOccurred();
+		err.val.typ = 'L';
 		err.init(this, "");
 	} else {
 		err.init(this, "not error");
@@ -168,7 +171,8 @@ void JVM::errClear() {
 Object JVM::newAry(string sig, int len) {
 	Object obj;
 	obj.sig = "[" + sig;
-	Class cls = this->findClass(sig.c_str());
+//	cout << obj.sig << endl;
+	Class cls = this->findClass(obj.sig.c_str());
 	if (!cls.valid) {
 		obj.init(this, "class not found by sig:" + sig);
 		return obj;
@@ -207,7 +211,18 @@ Object JVM::newAry(string sig, int len) {
 		obj.val.l = this->env->NewObjectArray(len, obj.cls.cls, 0);
 		obj.val.typ = 'L';
 	}
+	obj.init(this, "");
 	return obj;
+}
+Object JVM::newS(const jbyte* bys, int len) {
+	Object ary = this->newAry("B", len);
+	if (len) {
+		ary.sary((void*) bys, 0, len);
+	}
+	Class cls = this->findClass("Ljava/lang/String;");
+	Method m = cls.findMethod("<init>", "[B", "V", false);
+	jval val = ary.val;
+	return m.newA(&val, 1);
 }
 /* ------ JVM End ------ */
 
@@ -258,14 +273,14 @@ Field Class::findField(string name, string rsig, int static_) {
 	}
 	return f;
 }
-void Class::fromc(struct c_class c) {
+void Class::fromc(c_class c) {
 	this->fromc_(c.vmo);
 	this->jvm = (JVM*) c.jvm;
 	this->cls = c.cls;
 	this->name = string(c.name);
 }
-struct c_class Class::toc() {
-	struct c_class c;
+c_class Class::toc() {
+	c_class c;
 	c.vmo = this->toc_();
 	c.jvm = this->jvm;
 	c.cls = this->cls;
@@ -289,7 +304,7 @@ Field Object::findField(string name, string rsig) {
 	f.obj = *this;
 	return f;
 }
-void Object::set(int idx, struct jval val) {
+void Object::set(int idx, jval val) {
 	if ("Z" == this->sig) {
 		this->env->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx, 1,
 				&val.z);
@@ -323,7 +338,7 @@ Object Object::get(int idx) {
 		obj.init(this->jvm, obj.cls.msg);
 		return obj;
 	}
-	struct jval val;
+	jval val;
 	if ("Z" == this->sig) {
 		this->env->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx, 1,
 				&val.z);
@@ -360,15 +375,83 @@ Object Object::get(int idx) {
 	obj.val = val;
 	return obj;
 }
-void Object::fromc(struct c_object c) {
+int Object::len() {
+	return this->env->GetArrayLength((jarray) this->val.l);
+}
+void Object::cary(void* bs, int idx, int len) {
+	if ("[Z" == this->sig) {
+		this->env->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx, len,
+				(jboolean*) bs);
+	} else if ("[B" == this->sig) {
+		this->env->GetByteArrayRegion((jbyteArray) this->val.l, idx, len,
+				(jbyte*) bs);
+	} else if ("[C" == this->sig) {
+		this->env->GetCharArrayRegion((jcharArray) this->val.l, idx, len,
+				(jchar*) bs);
+	} else if ("[S" == this->sig) {
+		this->env->GetShortArrayRegion((jshortArray) this->val.l, idx, len,
+				(jshort*) bs);
+	} else if ("[I" == this->sig) {
+		this->env->GetIntArrayRegion((jintArray) this->val.l, idx, len,
+				(jint*) bs);
+	} else if ("[J" == this->sig) {
+		this->env->GetLongArrayRegion((jlongArray) this->val.l, idx, len,
+				(jlong*) bs);
+	} else if ("[F" == this->sig) {
+		this->env->GetFloatArrayRegion((jfloatArray) this->val.l, idx, len,
+				(jfloat*) bs);
+	} else if ("[D" == this->sig) {
+		this->env->GetDoubleArrayRegion((jdoubleArray) this->val.l, idx, len,
+				(jdouble*) bs);
+	}
+}
+void Object::sary(void* bs, int idx, int len) {
+	if ("[Z" == this->sig) {
+		this->env->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx, len,
+				(jboolean*) bs);
+	} else if ("[B" == this->sig) {
+		this->env->SetByteArrayRegion((jbyteArray) this->val.l, idx, len,
+				(jbyte*) bs);
+	} else if ("[C" == this->sig) {
+		this->env->SetCharArrayRegion((jcharArray) this->val.l, idx, len,
+				(jchar*) bs);
+	} else if ("[S" == this->sig) {
+		this->env->SetShortArrayRegion((jshortArray) this->val.l, idx, len,
+				(jshort*) bs);
+	} else if ("[I" == this->sig) {
+		this->env->SetIntArrayRegion((jintArray) this->val.l, idx, len,
+				(jint*) bs);
+	} else if ("[J" == this->sig) {
+		this->env->SetLongArrayRegion((jlongArray) this->val.l, idx, len,
+				(jlong*) bs);
+	} else if ("[F" == this->sig) {
+		this->env->SetFloatArrayRegion((jfloatArray) this->val.l, idx, len,
+				(jfloat*) bs);
+	} else if ("[D" == this->sig) {
+		this->env->SetDoubleArrayRegion((jdoubleArray) this->val.l, idx, len,
+				(jdouble*) bs);
+	}
+}
+Object Object::callA(string name, string vsig, string rsig, const jval * args,
+		int len) {
+	Method m = this->findMethod(name, vsig, rsig);
+	if (m.valid) {
+		return m.callA(args, len);
+	} else {
+		Object obj;
+		obj.init(this->jvm, m.msg);
+		return obj;
+	}
+}
+void Object::fromc(c_object c) {
 	this->fromc_(c.vmo);
 	this->jvm = (JVM*) c.jvm;
 	this->cls.fromc(c.cls);
 	this->sig = string(c.sig);
 	this->val = c.val;
 }
-struct c_object Object::toc() {
-	struct c_object c;
+c_object Object::toc() {
+	c_object c;
 	c.vmo = this->toc_();
 	c.jvm = this->jvm;
 	c.cls = this->cls.toc();
@@ -406,7 +489,7 @@ Object Method::callA(const jval * args, int len) {
 		vals = new jvalue[len];
 		this->covjval(vals, args, len);
 	}
-	struct jval val;
+	jval val;
 	if (this->static_) {
 		if ("V" == this->rsig) {
 			this->env->CallStaticVoidMethodA(this->cls.cls, this->mid, vals);
@@ -497,16 +580,16 @@ Object Method::callA(const jval * args, int len) {
 	obj.init(this->jvm, "");
 	return obj;
 }
-Object Method::newA(const struct jval * args, int len) {
+Object Method::newA(const jval * args, int len) {
 	Object obj;
-	obj.sig = this->rsig;
+	obj.sig = this->cls.name;
 	obj.cls = this->cls;
 	jvalue *vals = 0;
 	if (len) {
 		vals = new jvalue[len];
 		this->covjval(vals, args, len);
 	}
-	struct jval val;
+	jval val;
 	val.typ = 'L';
 	val.l = this->env->NewObjectA(this->cls.cls, this->mid, vals);
 	if (vals) {
@@ -517,7 +600,7 @@ Object Method::newA(const struct jval * args, int len) {
 	obj.init(this->jvm, "");
 	return obj;
 }
-void Method::fromc(struct c_method c) {
+void Method::fromc(c_method c) {
 	this->fromc_(c.vmo);
 	this->jvm = (JVM*) c.jvm;
 	this->cls.fromc(c.cls);
@@ -528,8 +611,8 @@ void Method::fromc(struct c_method c) {
 	this->rsig = string(c.rsig);
 	this->static_ = c.static_;
 }
-struct c_method Method::toc() {
-	struct c_method c;
+c_method Method::toc() {
+	c_method c;
 	c.vmo = this->toc_();
 	c.jvm = this->jvm;
 	c.cls = this->cls.toc();
@@ -666,7 +749,7 @@ void Field::set(jval val) {
 		}
 	}
 }
-void Field::fromc(struct c_field c) {
+void Field::fromc(c_field c) {
 	this->fromc_(c.vmo);
 	this->jvm = (JVM*) c.jvm;
 	this->cls.fromc(c.cls);
@@ -676,8 +759,8 @@ void Field::fromc(struct c_field c) {
 	this->rsig = string(c.rsig);
 	this->static_ = c.static_;
 }
-struct c_field Field::toc() {
-	struct c_field c;
+c_field Field::toc() {
+	c_field c;
 	c.vmo = this->toc_();
 	c.jvm = this->jvm;
 	c.cls = this->cls.toc();
