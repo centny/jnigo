@@ -153,6 +153,11 @@ void JNIGO_GetFloatArrayRegion(JNIEnv *env, jfloatArray array, jsize start,
 void JNIGO_GetDoubleArrayRegion(JNIEnv *env, jdoubleArray array, jsize start,
 		jsize len, jdouble *buf);
 //
+void JNIGO_test();
 //
 jsize JNIGO_GetArrayLength(JNIEnv *env, jarray array);
+
+void JNIGO_iii();
+void JNIGO_call();
+
 #endif

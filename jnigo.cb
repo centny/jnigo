@@ -11,7 +11,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <jni.h>
+#include <libc.h>
 #include "jnigo.h"
+//
+extern void JNIGO_printf(const char* i);
+void JNIGO_pr(const char* a, const char* b) {
+	char buf[10240];
+	int clen = sprintf(buf, "%s:%s", a, b);
+	buf[clen] = 0;
+	JNIGO_printf(buf);
+}
+//
 void covjval(jvalue *vals, const jval * args, int len) {
 	int i = 0;
 	for (i = 0; i < len; i++) {
@@ -47,7 +57,13 @@ void covjval(jvalue *vals, const jval * args, int len) {
 	}
 }
 jclass JNIGO_FindClass(JNIEnv *env, const char *name) {
-	return (*env)->FindClass(env, name);
+	JNIGO_pr("JNIGO_FindClass", name);
+	if (env == NULL || (*env) == NULL) {
+		JNIGO_pr("JNIGO_FindClass", "env null");
+	}
+	jclass cls = (*env)->FindClass(env, name);
+//	JNIGO_pr("JNIGO_FindClass-e",name);
+	return cls;
 }
 jint JNIGO_DestroyJavaVM(JavaVM *vm) {
 	return (*vm)->DestroyJavaVM(vm);
@@ -513,6 +529,26 @@ void JNIGO_GetDoubleArrayRegion(JNIEnv *env, jdoubleArray array, jsize start,
 }
 jsize JNIGO_GetArrayLength(JNIEnv *env, jarray array) {
 	return (*env)->GetArrayLength(env, array);
+}
+void JNIGO_test() {
+	JNIGO_printf("abcccc");
+}
+JavaVM *jvm; /* denotes a Java VM */
+JNIEnv *env; /* pointer to native method interface */
+void JNIGO_iii() {
+	JavaVMInitArgs vm_args; /* JDK/JRE 6 VM initialization arguments */
+	JavaVMOption options[1];
+	options[0].optionString = "-Djava.class.path=/usr/lib/java";
+	vm_args.version = JNI_VERSION_1_6;
+	vm_args.nOptions = 1;
+	vm_args.options = options;
+	vm_args.ignoreUnrecognized = JNI_FALSE;
+	JNI_CreateJavaVM(&jvm, (void**)&env, &vm_args);
+	/* load and initialize a Java VM, return a JNI interface
+	 * pointer in env */
+}
+void JNIGO_call() {
+	(*env)->FindClass(env, "java/lang/String");
 }
 //// void show(int a, int...) {
 //

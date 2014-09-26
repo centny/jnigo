@@ -1,8 +1,10 @@
 package jnigo
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/Centny/gwf/util"
+	_ "github.com/go-sql-driver/mysql"
 	"os"
 	"testing"
 )
@@ -500,6 +502,46 @@ func TestClassPath(t *testing.T) {
 	cls.AddPath("/Users/cny/Tmp/HH/poi")
 	cls.AddFloder("java/bin")
 	fmt.Println(cls.Option())
+}
+func TestShowa(t *testing.T) {
+	TestShow()
+}
+
+func TestFindClass(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		cls := GVM.FindClass("java.io.FileInputStream")
+		_, err := cls.New("/tmp/tlsx")
+		if err != nil {
+			fmt.Println("---------->", err.Error())
+		}
+	}
+}
+
+func TestDb(t *testing.T) {
+	JNIGO_iii()
+	for i := 0; i < 100; i++ {
+		sTestDb(t)
+	}
+}
+func sTestDb(t *testing.T) {
+	db, err := sql.Open("mysql", "cny:123@tcp(127.0.0.1:3306)/cny?charset=utf8")
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	tx, _ := db.Begin()
+	fmt.Println("exec----010")
+	defer func() {
+		fmt.Println("exec----070")
+		tx.Commit()
+		// db.Close()
+		fmt.Println("exec----080")
+		fmt.Println("----------------------------------------->")
+	}()
+	JNIGO_call()
+	// fmt.Println(GVM.FindClass("java/lang/String"))
+	// TestShow()
+	// GVM.New("java.lang.String", "/tmp/t.xlsx")
 }
 
 // func TestCreateClassPath(t *testing.T) {
