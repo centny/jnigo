@@ -73,11 +73,12 @@ func (v *Val) jval() C.jval {
 type Vmo C.c_vmo
 
 func (v *Vmo) Err() error {
+	defer ErrClear()
 	if v.valid == 0 {
 		cc := (*C.char)(unsafe.Pointer(&v.msg))
 		return errors.New(C.GoString(cc))
 	} else {
-		return nil
+		return ErrOccurred()
 	}
 }
 
@@ -99,6 +100,13 @@ func (c *Class) Call(name, vsig, rsig string, args []Val) (Object, error) {
 		return Object{}, err
 	}
 	return JNIGO_callA(m, args)
+}
+func (c *Class) CallV(name, rsig string, args ...interface{}) (Object, error) {
+	sig, vals, err := CovArgs(args...)
+	if err != nil {
+		return Object{}, err
+	}
+	return c.Call(name, sig, rsig, vals)
 }
 func (c *Class) New(args ...interface{}) (Object, error) {
 	sig, vals, err := CovArgs(args...)
@@ -153,6 +161,10 @@ func (o *Object) CallV(name, rsig string, args ...interface{}) (Object, error) {
 		return Object{}, err
 	}
 	return o.Call(name, sig, rsig, vals)
+}
+func (o *Object) CallVoid(name string, args ...interface{}) error {
+	_, err := o.CallV(name, "V", args...)
+	return err
 }
 func (o *Object) Z() bool {
 	return o.val.z != 0
@@ -294,6 +306,7 @@ func (o *Object) Get(idx int) (Object, error) {
 func (o *Object) Set(idx int, v Val) {
 	JNIGO_set_o(*o, idx, v)
 }
+
 func (o *Object) String() (string, error) {
 	u := JNIGO_newS("UTF-8")
 	b, err := o.Call("getBytes", "Ljava/lang/String;", "[B", []Val{
@@ -306,11 +319,52 @@ func (o *Object) String() (string, error) {
 	}
 }
 func (o *Object) ToString() string {
-	obj, _ := o.Call("toString", "", "Ljava/lang/String;", nil)
-	str, _ := obj.String()
-	return str
+	return JNIGO_toString(*o)
+}
+func (o *Object) As(name string) (Object, error) {
+	return JNIGO_as(*o, name)
 }
 
+func (o *Object) Value() interface{} {
+	switch o.Sig() {
+	case "Z":
+		return o.Z()
+	case "B":
+		return o.B()
+	case "C":
+		return o.C()
+	case "S":
+		return o.S()
+	case "I":
+		return o.I()
+	case "J":
+		return o.J()
+	case "F":
+		return o.F()
+	case "D":
+		return o.D()
+	case "[Z":
+		return o.Zs()
+	case "[B":
+		return o.Bs()
+	case "[C":
+		return o.Cs()
+	case "[S":
+		return o.Ss()
+	case "[I":
+		return o.Is()
+	case "[J":
+		return o.Js()
+	case "[F":
+		return o.Fs()
+	case "[D":
+		return o.Ds()
+	default:
+		return o.ToString()
+	}
+}
+
+//
 type Method C.c_method
 
 func (m *Method) Err() error {
@@ -332,44 +386,67 @@ func (f *Field) Err() error {
 */
 ///////////
 //
+func SetVersion(v int) {
+	JNIGO_setVersion(v)
+}
 func JNIGO_setVersion(v int) {
 	C.JNIGO_setVersion(C.int(v))
 }
-
+func SetIgnoreUnrecognized(i int) {
+	JNIGO_setIgnoreUnrecognized(i)
+}
 func JNIGO_setIgnoreUnrecognized(i int) {
 	C.JNIGO_setIgnoreUnrecognized(C.int(i))
 }
-
+func AddOption(option string) {
+	JNIGO_addOption(option)
+}
 func JNIGO_addOption(option string) {
 	cs := C.CString(option)
 	C.JNIGO_addOption(cs)
 	C.free(unsafe.Pointer(cs))
 }
 
+func Init() int {
+	return JNIGO_init()
+}
+
 func JNIGO_init() int {
 	return int(C.JNIGO_init())
+}
+
+func Destory() {
+	JNIGO_destory()
 }
 
 func JNIGO_destory() {
 	C.JNIGO_destory()
 }
 
+func ErrOccurred() error {
+	return JNIGO_errOccurred()
+}
+
 func JNIGO_errOccurred() error {
 	v := Object(C.JNIGO_errOccurred())
-	if v.Err() != nil {
+	if v.vmo.valid == 0 {
 		return nil
 	}
-	u := JNIGO_newS("UTF-8")
-	v, _ = v.Call("toString", "", "Ljava/lang/String", nil)
-	b, _ := v.Call("getBytes", "Ljava/lang/String;", "[B", []Val{
-		u.Val(),
-	})
-	return errors.New(string(b.Bs()))
+	return errors.New(JNIGO_toString(v))
+}
+
+func ErrClear() {
+	JNIGO_errClear()
 }
 
 func JNIGO_errClear() {
 	C.JNIGO_errClear()
 }
+
+func NewAry(sig string, l int) (Object, error) {
+	return JNIGO_newAry(sig, l)
+}
+
 func JNIGO_newAry(sig string, l int) (Object, error) {
 	csig := C.CString(sig)
 	defer C.free(unsafe.Pointer(csig))
@@ -378,6 +455,10 @@ func JNIGO_newAry(sig string, l int) (Object, error) {
 }
 
 // //
+func FindClass(name string) (Class, error) {
+	return JNIGO_findClass(name)
+}
+
 func JNIGO_findClass(name string) (Class, error) {
 	cs := C.CString(SigName(name))
 	defer C.free(unsafe.Pointer(cs))
@@ -431,6 +512,46 @@ func JNIGO_findObjField(obj Object, name, rsig string) (Field, error) {
 	v := Field(C.JNIGO_findObjField(C.c_object(obj), cname, crsig))
 	return v, v.Err()
 }
+func JNIGO_toString(obj Object) string {
+	cname := C.CString("toString")
+	cvsig := C.CString(SigName(""))
+	crsig := C.CString(SigName("Ljava/lang/String;"))
+	defer func() {
+		C.free(unsafe.Pointer(cname))
+		C.free(unsafe.Pointer(cvsig))
+		C.free(unsafe.Pointer(crsig))
+	}()
+	m := C.JNIGO_findObjMethod(C.c_object(obj), cname, cvsig, crsig)
+	if m.vmo.valid == 0 {
+		return C.GoString((*C.char)(unsafe.Pointer(&m.vmo.msg)))
+	}
+	v := C.JNIGO_callA(m, nil, 0)
+	//
+	cname2 := C.CString("getBytes")
+	cvsig2 := C.CString(SigName("Ljava/lang/String;"))
+	crsig2 := C.CString(SigName("[B"))
+	defer func() {
+		C.free(unsafe.Pointer(cname2))
+		C.free(unsafe.Pointer(cvsig2))
+		C.free(unsafe.Pointer(crsig2))
+	}()
+	u := JNIGO_newS("UTF-8")
+	val := u.Val()
+	uv := val.jval()
+	m2 := C.JNIGO_findObjMethod(v, cname2, cvsig2, crsig2)
+	if m2.vmo.valid == 0 {
+		return C.GoString((*C.char)(unsafe.Pointer(&m2.vmo.msg)))
+	}
+	v2 := C.JNIGO_callA(m2, &uv, 1)
+	l := int(C.JNIGO_len(v2))
+	bys := make([]C.jbyte, l)
+	C.JNIGO_cary(v2, unsafe.Pointer(&bys[0]), 0, C.int(l))
+	tbs := make([]byte, l)
+	for i, b := range bys {
+		tbs[i] = byte(b)
+	}
+	return string(tbs)
+}
 func JNIGO_len(obj Object) int {
 	return int(C.JNIGO_len(C.c_object(obj)))
 }
@@ -440,6 +561,18 @@ func JNIGO_cary(obj Object, buf unsafe.Pointer, idx, l int) {
 func JNIGO_sary(obj Object, buf unsafe.Pointer, idx, l int) {
 	C.JNIGO_sary(C.c_object(obj), buf, C.int(idx), C.int(l))
 }
+func JNIGO_as(obj Object, name string) (Object, error) {
+	cname := C.CString(SigName(name))
+	defer func() {
+		C.free(unsafe.Pointer(cname))
+	}()
+	v := Object(C.JNIGO_as(C.c_object(obj), cname))
+	return v, v.Err()
+}
+func NewS(bys string) Object {
+	return JNIGO_newS(bys)
+}
+
 func JNIGO_newS(bys string) Object {
 	if len(bys) > 0 {
 		jbs := toByte([]byte(bys))

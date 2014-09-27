@@ -25,8 +25,7 @@ class VmObj {
 public:
 	int valid;
 	string msg;
-	JavaVM *jvm; /* denotes a Java VM */
-	JNIEnv *env; /* pointer to native method interface */
+	JVM *jvm;
 public:
 	VmObj();
 	void init(JVM *jvm, string msg);
@@ -45,6 +44,8 @@ public:
 //};
 class JVM: public VmObj {
 public:
+	JavaVM *jvm_; /* denotes a Java VM */
+	JNIEnv *env_; /* pointer to native method interface */
 	int version;
 	int ignoreUnrecognized;
 	vector<string> options; /* the VM option */
@@ -66,7 +67,6 @@ public:
 ///
 class Class: public VmObj {
 public:
-	JVM *jvm;
 	jclass cls;
 	string name;
 public:
@@ -79,7 +79,6 @@ public:
 ///
 class Object: public VmObj {
 public:
-	JVM *jvm;
 	Class cls;
 	string sig;
 	jval val;
@@ -98,13 +97,14 @@ public:
 	Object callA(string name, string vsig, string rsig, const jval * args,
 			int len);
 	//
+	Object as(string name);
+	//
 	void fromc(c_object c);
 	c_object toc();
 };
 
 class Method: public VmObj {
 public:
-	JVM* jvm;
 	Class cls;
 	Object obj;
 	jmethodID mid;
@@ -122,7 +122,6 @@ public:
 };
 class Field: public VmObj {
 public:
-	JVM* jvm;
 	Class cls;
 	Object obj;
 	jfieldID fid;

@@ -82,6 +82,11 @@ void JNIGO_sary(c_object obj, void* buf, int idx, int len) {
 	robj.fromc(obj);
 	robj.sary(buf, idx, len);
 }
+c_object JNIGO_as(c_object obj, const char* name) {
+	Object robj;
+	robj.fromc(obj);
+	return robj.as(string(name)).toc();
+}
 //
 c_object JNIGO_newS(const jbyte* bys, int len) {
 	return jvm_g.newS(bys, len).toc();

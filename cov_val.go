@@ -1,6 +1,7 @@
 package jnigo
 
 import (
+	"fmt"
 	"reflect"
 	"unsafe"
 )
@@ -8,7 +9,7 @@ import (
 type Byte byte
 type Char byte
 
-func NewAry(sig string, ptr unsafe.Pointer, l int) (string, Object, error) {
+func NewAryp(sig string, ptr unsafe.Pointer, l int) (string, Object, error) {
 	obj, err := JNIGO_newAry(sig, l)
 	if err != nil {
 		return "", obj, err
@@ -19,7 +20,7 @@ func NewAry(sig string, ptr unsafe.Pointer, l int) (string, Object, error) {
 	return obj.Sig(), obj, nil
 }
 func NewAryv(sig string, ptr unsafe.Pointer, l int) (string, Val, error) {
-	sig, obj, err := NewAry(sig, ptr, l)
+	sig, obj, err := NewAryp(sig, ptr, l)
 	if err == nil {
 		return sig, obj.Val(), nil
 	} else {
@@ -95,6 +96,8 @@ func covary(arg interface{}) (string, Val, error) {
 	}
 	var _bval_ Byte
 	var _cval_ Char
+	var _oval_ Object
+	var __oval__ *Object
 	switch ptype.Elem() {
 	case reflect.TypeOf(_bval_):
 		l := pval.Len()
@@ -116,6 +119,35 @@ func covary(arg interface{}) (string, Val, error) {
 			vals = append(vals, jchar(pval.Index(i).Interface().(Char)))
 		}
 		return NewAryv("C", unsafe.Pointer(&vals[0]), l)
+	case reflect.TypeOf(_oval_):
+		l := pval.Len()
+		if l < 1 {
+			return "", Val{}, Err("Object slice is empty")
+		}
+		oary := arg.([]Object)
+		tary, err := NewAry(oary[0].Sig(), len(oary))
+		if err != nil {
+			return "", Val{}, err
+		}
+		for i, o := range oary {
+			tary.Set(i, o.Val())
+		}
+		fmt.Println(oary[0].Sig())
+		return tary.Sig(), tary.Val(), nil
+	case reflect.TypeOf(__oval__):
+		l := pval.Len()
+		if l < 1 {
+			return "", Val{}, Err("*Object slice is empty")
+		}
+		oary := arg.([]*Object)
+		tary, err := NewAry(oary[0].Sig(), len(oary))
+		if err != nil {
+			return "", Val{}, err
+		}
+		for i, o := range oary {
+			tary.Set(i, o.Val())
+		}
+		return tary.Sig(), tary.Val(), nil
 	}
 	//
 	switch ptype.Elem().Kind() {

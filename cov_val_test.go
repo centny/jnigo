@@ -40,7 +40,10 @@ func TestCovArgs(t *testing.T) {
 	fmt.Println(covary(nil))
 	// fmt.Println(covary([]EmptyObjAry{}))
 	// fmt.Println(covary([]EmptyObjAry{"asss"}))
-	// fmt.Println(covary([]Object{}))
+	fmt.Println(covary([]Object{}))
+	fmt.Println(covary([]Object{Object{}}))
+	fmt.Println(covary([]*Object{}))
+	fmt.Println(covary([]*Object{&Object{}}))
 	fmt.Println(covary([]string{""}))
 	//
 	fmt.Println(covval("arg"))

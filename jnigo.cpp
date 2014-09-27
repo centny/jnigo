@@ -4,7 +4,6 @@
 using namespace std;
 VmObj::VmObj() {
 	this->jvm = 0;
-	this->env = 0;
 	this->valid = false;
 	this->msg = "INVALID";
 }
@@ -43,21 +42,18 @@ void VmObj::covjval(jvalue *vals, const jval * args, int len) {
 	}
 }
 void VmObj::init(JVM *jvm, string msg) {
-	this->jvm = jvm->jvm;
-	this->env = jvm->env;
+	this->jvm = jvm;
 	this->valid = msg.size() == 0;
 	this->msg = msg;
 }
 void VmObj::fromc_(c_vmo c) {
-	this->jvm = (JavaVM *) c.jvm;
-	this->env = (JNIEnv *) c.env;
+	this->jvm = (JVM *) c.jvm;
 	this->msg = string(c.msg);
 	this->valid = c.valid;
 }
 c_vmo VmObj::toc_() {
 	c_vmo vmo;
 	vmo.jvm = this->jvm;
-	vmo.env = this->env;
 	vmo.valid = this->valid;
 	this->msg.copy(vmo.msg, this->msg.size());
 	vmo.msg[this->msg.size()] = 0;
@@ -81,9 +77,11 @@ c_vmo VmObj::toc_() {
 //}
 /* ------ JVM ------ */
 JVM::JVM() {
+	this->jvm = this;
+	this->jvm_ = 0;
+	this->env_ = 0;
 	this->valid = false;
 	this->msg = "";
-	this->env = 0;
 	this->jvm = 0;
 	this->options_ = 0;
 	this->version = JNI_VERSION_1_6;
@@ -108,7 +106,7 @@ int JVM::init() {
 	}
 	vm_args.version = this->version;
 	vm_args.ignoreUnrecognized = this->ignoreUnrecognized;
-	int status = JNI_CreateJavaVM(&jvm, (void**) &env, &vm_args);
+	int status = JNI_CreateJavaVM(&this->jvm_, (void**) &this->env_, &vm_args);
 	if (status == JNI_OK) {
 		this->valid = true;
 		this->msg = "";
@@ -123,8 +121,8 @@ int JVM::init() {
 void JVM::destory() {
 	if (this->jvm) {
 		this->destory();
-		this->env = 0;
-		this->jvm = 0;
+		this->env_ = 0;
+		this->jvm_ = 0;
 	}
 	if (this->options_) {
 		delete (this->options_);
@@ -135,7 +133,7 @@ void JVM::destory() {
 }
 Class JVM::findClass(string name) {
 	Class ncls;
-	ncls.cls = this->env->FindClass(name.c_str());
+	ncls.cls = this->env_->FindClass(name.c_str());
 	ncls.name = name;
 	ncls.jvm = this;
 	if (ncls.cls) {
@@ -150,8 +148,8 @@ Object JVM::errOccurred() {
 	err.jvm = this;
 	err.sig = "Ljava/lang/Throwable;";
 	err.cls = this->findClass(err.sig);
-	if (this->env->ExceptionCheck()) {
-		err.val.l = this->env->ExceptionOccurred();
+	if (this->env_->ExceptionCheck()) {
+		err.val.l = this->env_->ExceptionOccurred();
 		err.val.typ = 'L';
 		err.init(this, "");
 	} else {
@@ -160,7 +158,7 @@ Object JVM::errOccurred() {
 	return err;
 }
 void JVM::errClear() {
-	this->env->ExceptionClear();
+	this->env_->ExceptionClear();
 }
 //void JVM::free(VmObj **v) {
 //	if (v && *v) {
@@ -171,44 +169,38 @@ void JVM::errClear() {
 Object JVM::newAry(string sig, int len) {
 	Object obj;
 	obj.sig = "[" + sig;
-//	cout << obj.sig << endl;
-	Class cls = this->findClass(obj.sig.c_str());
-	if (!cls.valid) {
-		obj.init(this, "class not found by sig:" + sig);
+	obj.cls = this->findClass(obj.sig.c_str());
+	if (!obj.cls.valid) {
+		obj.init(this, "class not found by sig:" + obj.sig);
 		return obj;
 	}
 	if ("Z" == sig) {
-		obj.val.l = this->env->NewBooleanArray(len);
+		obj.val.l = this->env_->NewBooleanArray(len);
 		obj.val.typ = 'L';
 	} else if ("B" == sig) {
-		obj.val.l = this->env->NewByteArray(len);
+		obj.val.l = this->env_->NewByteArray(len);
 		obj.val.typ = 'L';
 	} else if ("C" == sig) {
-		obj.val.l = this->env->NewCharArray(len);
+		obj.val.l = this->env_->NewCharArray(len);
 		obj.val.typ = 'L';
 	} else if ("S" == sig) {
-		obj.val.l = this->env->NewShortArray(len);
+		obj.val.l = this->env_->NewShortArray(len);
 		obj.val.typ = 'L';
 	} else if ("I" == sig) {
-		obj.val.l = this->env->NewIntArray(len);
+		obj.val.l = this->env_->NewIntArray(len);
 		obj.val.typ = 'L';
 	} else if ("J" == sig) {
-		obj.val.l = this->env->NewLongArray(len);
+		obj.val.l = this->env_->NewLongArray(len);
 		obj.val.typ = 'L';
 	} else if ("F" == sig) {
-		obj.val.l = this->env->NewFloatArray(len);
+		obj.val.l = this->env_->NewFloatArray(len);
 		obj.val.typ = 'L';
 	} else if ("D" == sig) {
-		obj.val.l = this->env->NewDoubleArray(len);
+		obj.val.l = this->env_->NewDoubleArray(len);
 		obj.val.typ = 'L';
 	} else {
-		obj.cls = this->findClass(obj.sig);
-		if (!obj.cls.valid) {
-			obj.init(this, "class not found by sig:" + obj.sig);
-			return obj;
-		}
-
-		obj.val.l = this->env->NewObjectArray(len, obj.cls.cls, 0);
+		Class scls = this->findClass(sig);
+		obj.val.l = this->env_->NewObjectArray(len, scls.cls, 0);
 		obj.val.typ = 'L';
 	}
 	obj.init(this, "");
@@ -233,6 +225,11 @@ Class::Class() {
 }
 Method Class::findMethod(string name, string vsig, string rsig, int static_) {
 	Method m;
+	if (!this->valid) {
+		Method m;
+		m.init(this->jvm, "can't call find method for invalid class");
+		return m;
+	}
 	m.jvm = this->jvm;
 	m.cls = *this;
 	m.name = name;
@@ -241,10 +238,11 @@ Method Class::findMethod(string name, string vsig, string rsig, int static_) {
 	m.static_ = static_;
 	string sig_ = "(" + vsig + ")" + rsig;
 	if (static_) {
-		m.mid = this->env->GetStaticMethodID(this->cls, name.c_str(),
+		m.mid = this->jvm->env_->GetStaticMethodID(this->cls, name.c_str(),
 				sig_.c_str());
 	} else {
-		m.mid = this->env->GetMethodID(this->cls, name.c_str(), sig_.c_str());
+		m.mid = this->jvm->env_->GetMethodID(this->cls, name.c_str(),
+				sig_.c_str());
 	}
 	if (m.mid) {
 		m.init(this->jvm, "");
@@ -254,6 +252,11 @@ Method Class::findMethod(string name, string vsig, string rsig, int static_) {
 	return m;
 }
 Field Class::findField(string name, string rsig, int static_) {
+	if (!this->valid) {
+		Field f;
+		f.init(this->jvm, "can't call find field for invalid class");
+		return f;
+	}
 	Field f;
 	f.jvm = this->jvm;
 	f.cls = *this;
@@ -261,10 +264,11 @@ Field Class::findField(string name, string rsig, int static_) {
 	f.rsig = rsig;
 	f.static_ = static_;
 	if (static_) {
-		f.fid = this->env->GetStaticFieldID(this->cls, name.c_str(),
+		f.fid = this->jvm->env_->GetStaticFieldID(this->cls, name.c_str(),
 				rsig.c_str());
 	} else {
-		f.fid = this->env->GetFieldID(this->cls, name.c_str(), rsig.c_str());
+		f.fid = this->jvm->env_->GetFieldID(this->cls, name.c_str(),
+				rsig.c_str());
 	}
 	if (f.fid) {
 		f.init(this->jvm, "");
@@ -306,27 +310,31 @@ Field Object::findField(string name, string rsig) {
 }
 void Object::set(int idx, jval val) {
 	if ("Z" == this->sig) {
-		this->env->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx, 1,
-				&val.z);
+		this->jvm->env_->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx,
+				1, &val.z);
 	} else if ("B" == this->sig) {
-		this->env->SetByteArrayRegion((jbyteArray) this->val.l, idx, 1, &val.b);
+		this->jvm->env_->SetByteArrayRegion((jbyteArray) this->val.l, idx, 1,
+				&val.b);
 	} else if ("C" == this->sig) {
-		this->env->SetCharArrayRegion((jcharArray) this->val.l, idx, 1, &val.c);
+		this->jvm->env_->SetCharArrayRegion((jcharArray) this->val.l, idx, 1,
+				&val.c);
 	} else if ("S" == this->sig) {
-		this->env->SetShortArrayRegion((jshortArray) this->val.l, idx, 1,
+		this->jvm->env_->SetShortArrayRegion((jshortArray) this->val.l, idx, 1,
 				&val.s);
 	} else if ("I" == this->sig) {
-		this->env->SetIntArrayRegion((jintArray) this->val.l, idx, 1, &val.i);
+		this->jvm->env_->SetIntArrayRegion((jintArray) this->val.l, idx, 1,
+				&val.i);
 	} else if ("J" == this->sig) {
-		this->env->SetLongArrayRegion((jlongArray) this->val.l, idx, 1, &val.j);
+		this->jvm->env_->SetLongArrayRegion((jlongArray) this->val.l, idx, 1,
+				&val.j);
 	} else if ("F" == this->sig) {
-		this->env->SetFloatArrayRegion((jfloatArray) this->val.l, idx, 1,
+		this->jvm->env_->SetFloatArrayRegion((jfloatArray) this->val.l, idx, 1,
 				&val.f);
 	} else if ("D" == this->sig) {
-		this->env->SetDoubleArrayRegion((jdoubleArray) this->val.l, idx, 1,
-				&val.d);
+		this->jvm->env_->SetDoubleArrayRegion((jdoubleArray) this->val.l, idx,
+				1, &val.d);
 	} else {
-		this->env->SetObjectArrayElement((jobjectArray) this->val.l, idx,
+		this->jvm->env_->SetObjectArrayElement((jobjectArray) this->val.l, idx,
 				val.l);
 	}
 }
@@ -340,96 +348,100 @@ Object Object::get(int idx) {
 	}
 	jval val;
 	if ("Z" == this->sig) {
-		this->env->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx, 1,
-				&val.z);
+		this->jvm->env_->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx,
+				1, &val.z);
 		val.typ = 'Z';
 	} else if ("B" == this->sig) {
-		this->env->GetByteArrayRegion((jbyteArray) this->val.l, idx, 1, &val.b);
+		this->jvm->env_->GetByteArrayRegion((jbyteArray) this->val.l, idx, 1,
+				&val.b);
 		val.typ = 'B';
 	} else if ("C" == this->sig) {
-		this->env->GetCharArrayRegion((jcharArray) this->val.l, idx, 1, &val.c);
+		this->jvm->env_->GetCharArrayRegion((jcharArray) this->val.l, idx, 1,
+				&val.c);
 		val.typ = 'C';
 	} else if ("S" == this->sig) {
-		this->env->GetShortArrayRegion((jshortArray) this->val.l, idx, 1,
+		this->jvm->env_->GetShortArrayRegion((jshortArray) this->val.l, idx, 1,
 				&val.s);
 		val.typ = 'S';
 	} else if ("I" == this->sig) {
-		this->env->GetIntArrayRegion((jintArray) this->val.l, idx, 1, &val.i);
+		this->jvm->env_->GetIntArrayRegion((jintArray) this->val.l, idx, 1,
+				&val.i);
 		val.typ = 'I';
 	} else if ("J" == this->sig) {
-		this->env->GetLongArrayRegion((jlongArray) this->val.l, idx, 1, &val.j);
+		this->jvm->env_->GetLongArrayRegion((jlongArray) this->val.l, idx, 1,
+				&val.j);
 		val.typ = 'J';
 	} else if ("F" == this->sig) {
-		this->env->GetFloatArrayRegion((jfloatArray) this->val.l, idx, 1,
+		this->jvm->env_->GetFloatArrayRegion((jfloatArray) this->val.l, idx, 1,
 				&val.f);
 		val.typ = 'F';
 	} else if ("D" == this->sig) {
-		this->env->GetDoubleArrayRegion((jdoubleArray) this->val.l, idx, 1,
-				&val.d);
+		this->jvm->env_->GetDoubleArrayRegion((jdoubleArray) this->val.l, idx,
+				1, &val.d);
 		val.typ = 'D';
 	} else {
-		val.l = this->env->GetObjectArrayElement((jobjectArray) this->val.l,
-				idx);
+		val.l = this->jvm->env_->GetObjectArrayElement(
+				(jobjectArray) this->val.l, idx);
 		val.typ = 'L';
 	}
 	obj.val = val;
 	return obj;
 }
 int Object::len() {
-	return this->env->GetArrayLength((jarray) this->val.l);
+	return this->jvm->env_->GetArrayLength((jarray) this->val.l);
 }
 void Object::cary(void* bs, int idx, int len) {
 	if ("[Z" == this->sig) {
-		this->env->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx, len,
-				(jboolean*) bs);
+		this->jvm->env_->GetBooleanArrayRegion((jbooleanArray) this->val.l, idx,
+				len, (jboolean*) bs);
 	} else if ("[B" == this->sig) {
-		this->env->GetByteArrayRegion((jbyteArray) this->val.l, idx, len,
+		this->jvm->env_->GetByteArrayRegion((jbyteArray) this->val.l, idx, len,
 				(jbyte*) bs);
 	} else if ("[C" == this->sig) {
-		this->env->GetCharArrayRegion((jcharArray) this->val.l, idx, len,
+		this->jvm->env_->GetCharArrayRegion((jcharArray) this->val.l, idx, len,
 				(jchar*) bs);
 	} else if ("[S" == this->sig) {
-		this->env->GetShortArrayRegion((jshortArray) this->val.l, idx, len,
-				(jshort*) bs);
+		this->jvm->env_->GetShortArrayRegion((jshortArray) this->val.l, idx,
+				len, (jshort*) bs);
 	} else if ("[I" == this->sig) {
-		this->env->GetIntArrayRegion((jintArray) this->val.l, idx, len,
+		this->jvm->env_->GetIntArrayRegion((jintArray) this->val.l, idx, len,
 				(jint*) bs);
 	} else if ("[J" == this->sig) {
-		this->env->GetLongArrayRegion((jlongArray) this->val.l, idx, len,
+		this->jvm->env_->GetLongArrayRegion((jlongArray) this->val.l, idx, len,
 				(jlong*) bs);
 	} else if ("[F" == this->sig) {
-		this->env->GetFloatArrayRegion((jfloatArray) this->val.l, idx, len,
-				(jfloat*) bs);
+		this->jvm->env_->GetFloatArrayRegion((jfloatArray) this->val.l, idx,
+				len, (jfloat*) bs);
 	} else if ("[D" == this->sig) {
-		this->env->GetDoubleArrayRegion((jdoubleArray) this->val.l, idx, len,
-				(jdouble*) bs);
+		this->jvm->env_->GetDoubleArrayRegion((jdoubleArray) this->val.l, idx,
+				len, (jdouble*) bs);
 	}
 }
 void Object::sary(void* bs, int idx, int len) {
 	if ("[Z" == this->sig) {
-		this->env->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx, len,
-				(jboolean*) bs);
+		this->jvm->env_->SetBooleanArrayRegion((jbooleanArray) this->val.l, idx,
+				len, (jboolean*) bs);
 	} else if ("[B" == this->sig) {
-		this->env->SetByteArrayRegion((jbyteArray) this->val.l, idx, len,
+		this->jvm->env_->SetByteArrayRegion((jbyteArray) this->val.l, idx, len,
 				(jbyte*) bs);
 	} else if ("[C" == this->sig) {
-		this->env->SetCharArrayRegion((jcharArray) this->val.l, idx, len,
+		this->jvm->env_->SetCharArrayRegion((jcharArray) this->val.l, idx, len,
 				(jchar*) bs);
 	} else if ("[S" == this->sig) {
-		this->env->SetShortArrayRegion((jshortArray) this->val.l, idx, len,
-				(jshort*) bs);
+		this->jvm->env_->SetShortArrayRegion((jshortArray) this->val.l, idx,
+				len, (jshort*) bs);
 	} else if ("[I" == this->sig) {
-		this->env->SetIntArrayRegion((jintArray) this->val.l, idx, len,
+		this->jvm->env_->SetIntArrayRegion((jintArray) this->val.l, idx, len,
 				(jint*) bs);
 	} else if ("[J" == this->sig) {
-		this->env->SetLongArrayRegion((jlongArray) this->val.l, idx, len,
+		this->jvm->env_->SetLongArrayRegion((jlongArray) this->val.l, idx, len,
 				(jlong*) bs);
 	} else if ("[F" == this->sig) {
-		this->env->SetFloatArrayRegion((jfloatArray) this->val.l, idx, len,
-				(jfloat*) bs);
+		this->jvm->env_->SetFloatArrayRegion((jfloatArray) this->val.l, idx,
+				len, (jfloat*) bs);
 	} else if ("[D" == this->sig) {
-		this->env->SetDoubleArrayRegion((jdoubleArray) this->val.l, idx, len,
-				(jdouble*) bs);
+		this->jvm->env_->SetDoubleArrayRegion((jdoubleArray) this->val.l, idx,
+				len, (jdouble*) bs);
 	}
 }
 Object Object::callA(string name, string vsig, string rsig, const jval * args,
@@ -440,6 +452,17 @@ Object Object::callA(string name, string vsig, string rsig, const jval * args,
 	} else {
 		Object obj;
 		obj.init(this->jvm, m.msg);
+		return obj;
+	}
+}
+Object Object::as(string name) {
+	Object obj = *this;
+	obj.cls = this->jvm->findClass(name);
+	if (obj.cls.valid) {
+		obj.sig = name;
+		return obj;
+	} else {
+		obj.init(this->jvm, obj.cls.msg);
 		return obj;
 	}
 }
@@ -483,6 +506,8 @@ Object Method::callA(const jval * args, int len) {
 			obj.init(this->jvm, obj.cls.msg);
 			return obj;
 		}
+	} else {
+		obj.cls.init(this->jvm, "INVALID");
 	}
 	jvalue *vals = 0;
 	if (len) {
@@ -492,83 +517,85 @@ Object Method::callA(const jval * args, int len) {
 	jval val;
 	if (this->static_) {
 		if ("V" == this->rsig) {
-			this->env->CallStaticVoidMethodA(this->cls.cls, this->mid, vals);
+			this->jvm->env_->CallStaticVoidMethodA(this->cls.cls, this->mid,
+					vals);
 			val.typ = 'V';
 		} else if ("Z" == this->rsig) {
-			val.z = this->env->CallStaticBooleanMethodA(this->cls.cls,
+			val.z = this->jvm->env_->CallStaticBooleanMethodA(this->cls.cls,
 					this->mid, vals);
 			val.typ = 'Z';
 		} else if ("B" == this->rsig) {
-			val.b = this->env->CallStaticByteMethodA(this->cls.cls, this->mid,
-					vals);
+			val.b = this->jvm->env_->CallStaticByteMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'B';
 		} else if ("C" == this->rsig) {
-			val.c = this->env->CallStaticCharMethodA(this->cls.cls, this->mid,
-					vals);
+			val.c = this->jvm->env_->CallStaticCharMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'C';
 		} else if ("S" == this->rsig) {
-			val.s = this->env->CallStaticShortMethodA(this->cls.cls, this->mid,
-					vals);
+			val.s = this->jvm->env_->CallStaticShortMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'S';
 		} else if ("I" == this->rsig) {
-			val.i = this->env->CallStaticIntMethodA(this->cls.cls, this->mid,
-					vals);
+			val.i = this->jvm->env_->CallStaticIntMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'I';
 		} else if ("J" == this->rsig) {
-			val.j = this->env->CallStaticLongMethodA(this->cls.cls, this->mid,
-					vals);
+			val.j = this->jvm->env_->CallStaticLongMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'J';
 		} else if ("F" == this->rsig) {
-			val.f = this->env->CallStaticFloatMethodA(this->cls.cls, this->mid,
-					vals);
+			val.f = this->jvm->env_->CallStaticFloatMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'F';
 		} else if ("D" == this->rsig) {
-			val.d = this->env->CallStaticDoubleMethodA(this->cls.cls, this->mid,
-					vals);
+			val.d = this->jvm->env_->CallStaticDoubleMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'D';
 		} else {
-			val.l = this->env->CallStaticObjectMethodA(this->cls.cls, this->mid,
-					vals);
+			val.l = this->jvm->env_->CallStaticObjectMethodA(this->cls.cls,
+					this->mid, vals);
 			val.typ = 'L';
 		}
 	} else {
 		if ("V" == this->rsig) {
-			this->env->CallVoidMethodA(this->obj.val.l, this->mid, vals);
+			this->jvm->env_->CallVoidMethodA(this->obj.val.l, this->mid, vals);
 			val.typ = 'V';
 		} else if ("Z" == this->rsig) {
-			val.z = this->env->CallBooleanMethodA(this->obj.val.l, this->mid,
-					vals);
+			val.z = this->jvm->env_->CallBooleanMethodA(this->obj.val.l,
+					this->mid, vals);
 			val.typ = 'Z';
 		} else if ("B" == this->rsig) {
-			val.b = this->env->CallByteMethodA(this->obj.val.l, this->mid,
+			val.b = this->jvm->env_->CallByteMethodA(this->obj.val.l, this->mid,
 					vals);
 			val.typ = 'B';
 		} else if ("C" == this->rsig) {
-			val.c = this->env->CallCharMethodA(this->obj.val.l, this->mid,
+			val.c = this->jvm->env_->CallCharMethodA(this->obj.val.l, this->mid,
 					vals);
 			val.typ = 'C';
 		} else if ("S" == this->rsig) {
-			val.s = this->env->CallShortMethodA(this->obj.val.l, this->mid,
-					vals);
+			val.s = this->jvm->env_->CallShortMethodA(this->obj.val.l,
+					this->mid, vals);
 			val.typ = 'S';
 		} else if ("I" == this->rsig) {
-			val.i = this->env->CallIntMethodA(this->obj.val.l, this->mid, vals);
+			val.i = this->jvm->env_->CallIntMethodA(this->obj.val.l, this->mid,
+					vals);
 			val.typ = 'I';
 		} else if ("J" == this->rsig) {
-			val.j = this->env->CallLongMethodA(this->obj.val.l, this->mid,
+			val.j = this->jvm->env_->CallLongMethodA(this->obj.val.l, this->mid,
 					vals);
 			val.typ = 'J';
 		} else if ("F" == this->rsig) {
-			val.f = this->env->CallFloatMethodA(this->obj.val.l, this->mid,
-					vals);
+			val.f = this->jvm->env_->CallFloatMethodA(this->obj.val.l,
+					this->mid, vals);
 			val.typ = 'F';
 		} else if ("D" == this->rsig) {
-			val.d = this->env->CallDoubleMethodA(this->obj.val.l, this->mid,
-					vals);
+			val.d = this->jvm->env_->CallDoubleMethodA(this->obj.val.l,
+					this->mid, vals);
 			val.typ = 'D';
 		} else {
-			val.l = this->env->CallObjectMethodA(this->obj.val.l, this->mid,
-					vals);
+			val.l = this->jvm->env_->CallObjectMethodA(this->obj.val.l,
+					this->mid, vals);
 			val.typ = 'L';
 		}
 	}
@@ -591,7 +618,7 @@ Object Method::newA(const jval * args, int len) {
 	}
 	jval val;
 	val.typ = 'L';
-	val.l = this->env->NewObjectA(this->cls.cls, this->mid, vals);
+	val.l = this->jvm->env_->NewObjectA(this->cls.cls, this->mid, vals);
 	if (vals) {
 		delete vals;
 		vals = 0;
@@ -648,60 +675,70 @@ Object Field::get() {
 	jval val;
 	if (this->static_) {
 		if ("Z" == this->rsig) {
-			val.z = this->env->GetStaticBooleanField(this->cls.cls, this->fid);
+			val.z = this->jvm->env_->GetStaticBooleanField(this->cls.cls,
+					this->fid);
 			val.typ = 'Z';
 		} else if ("B" == this->rsig) {
-			val.b = this->env->GetStaticByteField(this->cls.cls, this->fid);
+			val.b = this->jvm->env_->GetStaticByteField(this->cls.cls,
+					this->fid);
 			val.typ = 'B';
 		} else if ("C" == this->rsig) {
-			val.c = this->env->GetStaticCharField(this->cls.cls, this->fid);
+			val.c = this->jvm->env_->GetStaticCharField(this->cls.cls,
+					this->fid);
 			val.typ = 'C';
 		} else if ("S" == this->rsig) {
-			val.s = this->env->GetStaticShortField(this->cls.cls, this->fid);
+			val.s = this->jvm->env_->GetStaticShortField(this->cls.cls,
+					this->fid);
 			val.typ = 'S';
 		} else if ("I" == this->rsig) {
-			val.i = this->env->GetStaticIntField(this->cls.cls, this->fid);
+			val.i = this->jvm->env_->GetStaticIntField(this->cls.cls,
+					this->fid);
 			val.typ = 'I';
 		} else if ("J" == this->rsig) {
-			val.j = this->env->GetStaticLongField(this->cls.cls, this->fid);
+			val.j = this->jvm->env_->GetStaticLongField(this->cls.cls,
+					this->fid);
 			val.typ = 'L';
 		} else if ("F" == this->rsig) {
-			val.f = this->env->GetStaticFloatField(this->cls.cls, this->fid);
+			val.f = this->jvm->env_->GetStaticFloatField(this->cls.cls,
+					this->fid);
 			val.typ = 'F';
 		} else if ("D" == this->rsig) {
-			val.d = this->env->GetStaticDoubleField(this->cls.cls, this->fid);
+			val.d = this->jvm->env_->GetStaticDoubleField(this->cls.cls,
+					this->fid);
 			val.typ = 'D';
 		} else {
-			val.l = this->env->GetStaticObjectField(this->cls.cls, this->fid);
+			val.l = this->jvm->env_->GetStaticObjectField(this->cls.cls,
+					this->fid);
 			val.typ = 'L';
 		}
 	} else {
 		if ("Z" == this->rsig) {
-			val.z = this->env->GetBooleanField(this->obj.val.l, this->fid);
+			val.z = this->jvm->env_->GetBooleanField(this->obj.val.l,
+					this->fid);
 			val.typ = 'Z';
 		} else if ("B" == this->rsig) {
-			val.b = this->env->GetByteField(this->obj.val.l, this->fid);
+			val.b = this->jvm->env_->GetByteField(this->obj.val.l, this->fid);
 			val.typ = 'B';
 		} else if ("C" == this->rsig) {
-			val.c = this->env->GetCharField(this->obj.val.l, this->fid);
+			val.c = this->jvm->env_->GetCharField(this->obj.val.l, this->fid);
 			val.typ = 'C';
 		} else if ("S" == this->rsig) {
-			val.s = this->env->GetShortField(this->obj.val.l, this->fid);
+			val.s = this->jvm->env_->GetShortField(this->obj.val.l, this->fid);
 			val.typ = 'S';
 		} else if ("I" == this->rsig) {
-			val.i = this->env->GetIntField(this->obj.val.l, this->fid);
+			val.i = this->jvm->env_->GetIntField(this->obj.val.l, this->fid);
 			val.typ = 'I';
 		} else if ("J" == this->rsig) {
-			val.j = this->env->GetLongField(this->obj.val.l, this->fid);
+			val.j = this->jvm->env_->GetLongField(this->obj.val.l, this->fid);
 			val.typ = 'j';
 		} else if ("F" == this->rsig) {
-			val.f = this->env->GetFloatField(this->obj.val.l, this->fid);
+			val.f = this->jvm->env_->GetFloatField(this->obj.val.l, this->fid);
 			val.typ = 'F';
 		} else if ("D" == this->rsig) {
-			val.d = this->env->GetDoubleField(this->obj.val.l, this->fid);
+			val.d = this->jvm->env_->GetDoubleField(this->obj.val.l, this->fid);
 			val.typ = 'D';
 		} else {
-			val.l = this->env->GetObjectField(this->obj.val.l, this->fid);
+			val.l = this->jvm->env_->GetObjectField(this->obj.val.l, this->fid);
 			val.typ = 'L';
 		}
 	}
@@ -711,41 +748,48 @@ Object Field::get() {
 void Field::set(jval val) {
 	if (this->static_) {
 		if ("B" == this->rsig) {
-			this->env->SetStaticByteField(this->cls.cls, this->fid, val.z);
+			this->jvm->env_->SetStaticByteField(this->cls.cls, this->fid,
+					val.z);
 		} else if ("C" == this->rsig) {
-			this->env->SetStaticCharField(this->cls.cls, this->fid, val.c);
+			this->jvm->env_->SetStaticCharField(this->cls.cls, this->fid,
+					val.c);
 		} else if ("S" == this->rsig) {
-			this->env->SetStaticShortField(this->cls.cls, this->fid, val.s);
+			this->jvm->env_->SetStaticShortField(this->cls.cls, this->fid,
+					val.s);
 		} else if ("I" == this->rsig) {
-			this->env->SetStaticIntField(this->cls.cls, this->fid, val.i);
+			this->jvm->env_->SetStaticIntField(this->cls.cls, this->fid, val.i);
 		} else if ("J" == this->rsig) {
-			this->env->SetStaticLongField(this->cls.cls, this->fid, val.j);
+			this->jvm->env_->SetStaticLongField(this->cls.cls, this->fid,
+					val.j);
 		} else if ("F" == this->rsig) {
-			this->env->SetStaticFloatField(this->cls.cls, this->fid, val.f);
+			this->jvm->env_->SetStaticFloatField(this->cls.cls, this->fid,
+					val.f);
 		} else if ("D" == this->rsig) {
-			this->env->SetStaticDoubleField(this->cls.cls, this->fid, val.d);
+			this->jvm->env_->SetStaticDoubleField(this->cls.cls, this->fid,
+					val.d);
 		} else {
-			this->env->SetStaticObjectField(this->cls.cls, this->fid, val.l);
+			this->jvm->env_->SetStaticObjectField(this->cls.cls, this->fid,
+					val.l);
 		}
 	} else {
 		if ("Z" == this->rsig) {
-			this->env->SetBooleanField(this->obj.val.l, this->fid, val.z);
+			this->jvm->env_->SetBooleanField(this->obj.val.l, this->fid, val.z);
 		} else if ("B" == this->rsig) {
-			this->env->SetByteField(this->obj.val.l, this->fid, val.b);
+			this->jvm->env_->SetByteField(this->obj.val.l, this->fid, val.b);
 		} else if ("C" == this->rsig) {
-			this->env->SetCharField(this->obj.val.l, this->fid, val.c);
+			this->jvm->env_->SetCharField(this->obj.val.l, this->fid, val.c);
 		} else if ("S" == this->rsig) {
-			this->env->SetShortField(this->obj.val.l, this->fid, val.s);
+			this->jvm->env_->SetShortField(this->obj.val.l, this->fid, val.s);
 		} else if ("I" == this->rsig) {
-			this->env->SetIntField(this->obj.val.l, this->fid, val.i);
+			this->jvm->env_->SetIntField(this->obj.val.l, this->fid, val.i);
 		} else if ("J" == this->rsig) {
-			this->env->SetLongField(this->obj.val.l, this->fid, val.j);
+			this->jvm->env_->SetLongField(this->obj.val.l, this->fid, val.j);
 		} else if ("F" == this->rsig) {
-			this->env->SetFloatField(this->obj.val.l, this->fid, val.f);
+			this->jvm->env_->SetFloatField(this->obj.val.l, this->fid, val.f);
 		} else if ("D" == this->rsig) {
-			this->env->SetDoubleField(this->obj.val.l, this->fid, val.d);
+			this->jvm->env_->SetDoubleField(this->obj.val.l, this->fid, val.d);
 		} else {
-			this->env->SetObjectField(this->obj.val.l, this->fid, val.l);
+			this->jvm->env_->SetObjectField(this->obj.val.l, this->fid, val.l);
 		}
 	}
 }

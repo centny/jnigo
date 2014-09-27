@@ -30,7 +30,6 @@ typedef struct {
 	int valid;
 	char msg[512];
 	void* jvm;
-	void* env;
 } c_vmo;
 //typedef struct {
 //	c_vmo vmo;
@@ -97,6 +96,7 @@ c_field JNIGO_findObjField(c_object obj, const char* name, const char* rsig);
 int JNIGO_len(c_object obj);
 void JNIGO_cary(c_object obj, void* buf, int idx, int len);
 void JNIGO_sary(c_object obj, void* buf, int idx, int len);
+c_object JNIGO_as(c_object obj, const char* name);
 //
 c_object JNIGO_newS(const jbyte* bys, int len);
 c_object JNIGO_newA(c_method m, const jval * args, int len);
